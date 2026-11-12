@@ -38,6 +38,7 @@ class ArrDownloaderService:
         self.radarr = radarr
         self.last_error: str | None = None
         self.series_only_match: dict[str, str] | None = None
+        self.searched_providers: list[str] = []
         self.download_timeout = self._load_download_timeout()
         self._sonarr_season_format: str | None = None
         self._provider_tmdb_cache: dict[tuple, str] = {}
@@ -72,6 +73,7 @@ class ArrDownloaderService:
 
     def locate(self, item: dict, season_num: int | None = None, ep_num: int | None = None) -> tuple[dict[str, Any] | None, str]:
         self.series_only_match = None
+        self.searched_providers = []
         media_type = "movie" if item.get("content_type") == "movie" else "tv"
         tmdb_id = self._resolve_request_tmdb_id(item, media_type)
         resolve_titles = self._resolve_radarr_title if media_type == "movie" else self._resolve_sonarr_title
@@ -1083,6 +1085,13 @@ class ArrDownloaderService:
             pool.shutdown(wait=False, cancel_futures=True)
 
     @staticmethod
+    def _release_years_differ(expected_year: Any, result_year: Any) -> bool:
+        try:
+            return abs(int(expected_year) - int(result_year)) > 1
+        except (TypeError, ValueError):
+            return False
+
+    @staticmethod
     def _episode_count(result: Any) -> int | None:
         raw_data = getattr(result, "raw_data", None)
         count = raw_data.get("episodes_count") if isinstance(raw_data, dict) else None
@@ -1271,6 +1280,7 @@ class ArrDownloaderService:
         """
         candidates = self._unique_titles(titles)
         providers = self._provider_order(primary_provider)
+        self.searched_providers = providers
         logger.info(f"[title_fallback] Provider order: {providers}; title candidates: {candidates}")
 
         for provider_index, provider in enumerate(providers):
@@ -1443,6 +1453,9 @@ class ArrDownloaderService:
                 for r in strict_candidates:
                     result_media_type = self._result_media_type(r)
                     if result_media_type == media_type:
+                        if media_type == "movie" and self._release_years_differ(expected_year, r.year):
+                            rejected["year mismatch"] = rejected.get("year mismatch", 0) + 1
+                            continue
                         same_type_candidates.append(r)
                         continue
                     rejected["type mismatch"] = rejected.get("type mismatch", 0) + 1

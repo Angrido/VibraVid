@@ -162,6 +162,15 @@
             box.classList.add("is-bad");
             line.textContent = tr("Not found on any configured provider.");
             box.append(line);
+            if (result.searched && result.searched.length) {
+                const searched = document.createElement("p");
+                searched.className = "am-source";
+                const names = document.createElement("span");
+                names.dataset.noTr = "";
+                names.textContent = result.searched.join(", ");
+                searched.append(tr("Searched on:") + " ", names);
+                box.append(searched);
+            }
             if (result.series_only) {
                 line.textContent = tr("Found only as a series, while Radarr lists it as a movie.");
                 const seen = document.createElement("p");
