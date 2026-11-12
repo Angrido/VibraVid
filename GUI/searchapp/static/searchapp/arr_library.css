@@ -20,6 +20,8 @@
 .lib-lang { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
 .lib-lang-st { min-width: 0; white-space: normal; line-height: 1.3; backdrop-filter: none; -webkit-backdrop-filter: none; }
 .lib-lang-btn { flex: 0 0 auto; min-height: 36px; padding-inline: 12px; }
+.lib-lang-src { font-size: 13px; padding-block: 12px; }
+.lib-lang-src[hidden] { display: none; }
 .lib-lang-btn[aria-busy] { cursor: progress; animation: cn-pulse 1.1s ease-in-out infinite; }
 
 .lib-langbar {

@@ -87,6 +87,14 @@
             if (summary?.count) {
                 badge.append(" ", Object.assign(document.createElement("span"), {className: "cn-num", textContent: summary.count}));
             }
+            const link = item.querySelector("[data-lib-source]");
+            const source = summary?.source;
+            const valid = source && /^https?:\/\//i.test(source.url || "");
+            link.hidden = !valid;
+            if (valid) {
+                link.href = source.url;
+                link.setAttribute("aria-label", tr("Open on the provider: {provider}").replace("{provider}", source.provider));
+            }
         });
         apply();
     }

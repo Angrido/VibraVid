@@ -177,6 +177,7 @@ class ArrLanguageCheck(models.Model):
     verdict = models.CharField(max_length=16, choices=Verdict.choices)
     languages = models.JSONField(default=list, blank=True)
     provider = models.CharField(max_length=100, blank=True, default="")
+    source_url = models.CharField(max_length=500, blank=True, default="")
     checked_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):

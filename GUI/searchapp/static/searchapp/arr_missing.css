@@ -131,6 +131,14 @@
 .am-result.is-bad  { box-shadow: inset 3px 0 0 var(--cn-hot); }
 .am-verdict { margin: 0; font-weight: 700; }
 .am-source { margin: 0; color: var(--cn-mute); font-size: 13px; overflow-wrap: anywhere; }
+.am-src, .lib-lang-src {
+  color: var(--cn-white); font-weight: 600; text-decoration: underline; text-underline-offset: 3px;
+  text-decoration-color: var(--cn-edge-2); transition: text-decoration-color var(--cn-t-fast) ease;
+}
+.am-src::after, .lib-lang-src::after { content: " \2197"; text-decoration: none; display: inline-block; }
+.am-src { display: inline-block; padding-block: 8px; }
+.am-src:hover, .lib-lang-src:hover { text-decoration-color: var(--cn-white); }
+.am-src:focus-visible, .lib-lang-src:focus-visible { outline: 2px solid var(--cn-focus); outline-offset: 2px; border-radius: 4px; }
 
 .am-chips { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; flex-wrap: wrap; }
 .am-chip {

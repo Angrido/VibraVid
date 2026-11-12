@@ -15,6 +15,7 @@
 {% if card.missing %}
 	<div class="lib-lang">
 		<span class="cn-st lib-lang-st {% if card.lang.tone == 'good' %}is-done{% elif card.lang.tone == 'warn' %}is-warn{% elif card.lang.tone == 'bad' %}is-dead{% else %}is-wait{% endif %}" data-lib-lang-badge><span>{% if card.lang %}{{ card.lang.label }}{% else %}Not checked{% endif %}</span>{% if card.lang.count %} <span class="cn-num">{{ card.lang.count }}</span>{% endif %}</span>
+		<a class="lib-lang-src" data-lib-source target="_blank" rel="noopener noreferrer"{% if card.lang.source.url %} href="{{ card.lang.source.url }}" aria-label="Open on the provider: {{ card.lang.source.provider }}"{% else %} hidden{% endif %}>Open on the provider</a>
 		<button class="cn-opt lib-lang-btn" type="button" data-lib-check="{% if card.kind == 'movie' %}movie{% else %}series{% endif %}" data-lib-id="{{ card.id }}"
 		        aria-label="Check Italian audio: {{ card.title }}">Check</button>
 	</div>

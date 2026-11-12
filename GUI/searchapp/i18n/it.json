@@ -564,5 +564,7 @@
   "Invalid interval.": "Intervallo non valido.",
   "Could not save the check interval. Please retry.": "Impossibile salvare l'intervallo di controllo. Riprova.",
   "Every {n} h": "Ogni {n} h",
-  "Italian audio check": "Controllo audio italiano"
+  "Italian audio check": "Controllo audio italiano",
+  "Open on the provider": "Apri sul provider",
+  "Open on the provider: {provider}": "Apri sul provider: {provider}"
 }
