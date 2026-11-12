@@ -18,10 +18,15 @@ from ._shared import _is_recent_webhook, _mark_native_webhook_seen
 logger = logging.getLogger(__name__)
 
 
+def _manual_mode_response(source_tag: str) -> JsonResponse:
+    logger.info(f"[{source_tag} WEBHOOK] Automatic downloads are off, nothing will be downloaded")
+    return JsonResponse({"status": "manual", "message": "Automatic downloads are off in VibraVid"}, status=200)
+
+
 @require_http_methods(["GET"])
 def arr_stack(request: HttpRequest) -> HttpResponse:
     """Display VibraVid's internal queue for media accepted from ARR."""
-    from ..arr.arr_service import _load_arr_config
+    from ..arr.arr_service import _load_arr_config, automatic_downloads_enabled
 
     cfg = _load_arr_config()
     status_filter = request.GET.get("status", "all")
@@ -58,6 +63,7 @@ def arr_stack(request: HttpRequest) -> HttpResponse:
         "nav_active": "arr",
         "arr_enabled": cfg.get("enabled", False),
         "polling_enabled": cfg.get("enable_polling", False),
+        "auto_download": automatic_downloads_enabled(cfg),
         "entries": queue_entries[:300],
         "shown_count": min(filtered_count, 300),
         "filtered_count": filtered_count,
@@ -85,7 +91,7 @@ def seerr_webhook(request: HttpRequest) -> JsonResponse:
     Validates X-Webhook-Token, logs the event, and triggers immediate sync.
     """
     try:
-        from ..arr.arr_service import _load_arr_config, trigger_webhook_sync
+        from ..arr.arr_service import _load_arr_config, automatic_downloads_enabled, trigger_webhook_sync
         from ..models import ArrWebhookEvent
 
         # ── Log incoming request ──
@@ -107,6 +113,9 @@ def seerr_webhook(request: HttpRequest) -> JsonResponse:
         if not cfg.get("enable_seerr_webhook"):
             logger.warning("[SEERR WEBHOOK] Seerr webhook is disabled, ignoring")
             return JsonResponse({"status": "disabled", "message": "Seerr webhook is disabled"}, status=200)
+
+        if not automatic_downloads_enabled(cfg):
+            return _manual_mode_response("SEERR")
 
         # Validate webhook token
         expected_secret = cfg.get("seerr", {}).get("webhook_secret", "")
@@ -227,7 +236,12 @@ def sonarr_webhook(request: HttpRequest) -> JsonResponse:
     Validates X-Webhook-Token, logs the event, and triggers immediate targeted sync.
     """
     try:
-        from ..arr.arr_service import _load_arr_config, _series_tmdb_id, trigger_sonarr_webhook_sync
+        from ..arr.arr_service import (
+            _load_arr_config,
+            _series_tmdb_id,
+            automatic_downloads_enabled,
+            trigger_sonarr_webhook_sync,
+        )
         from ..models import ArrWebhookEvent
 
         # ── Log incoming request ──
@@ -247,6 +261,9 @@ def sonarr_webhook(request: HttpRequest) -> JsonResponse:
         if not cfg.get("enable_sonarr_webhook"):
             logger.warning("[SONARR WEBHOOK] Sonarr webhook is disabled, ignoring")
             return JsonResponse({"status": "disabled", "message": "Sonarr webhook is disabled"}, status=200)
+
+        if not automatic_downloads_enabled(cfg):
+            return _manual_mode_response("SONARR")
 
         expected_secret = cfg.get("sonarr_webhook", {}).get("webhook_secret", "")
         if expected_secret:
@@ -362,7 +379,7 @@ def radarr_webhook(request: HttpRequest) -> JsonResponse:
     Validates X-Webhook-Token, logs the event, and triggers immediate targeted sync.
     """
     try:
-        from ..arr.arr_service import _load_arr_config, trigger_radarr_webhook_sync
+        from ..arr.arr_service import _load_arr_config, automatic_downloads_enabled, trigger_radarr_webhook_sync
         from ..models import ArrWebhookEvent
 
         # ── Log incoming request ──
@@ -382,6 +399,9 @@ def radarr_webhook(request: HttpRequest) -> JsonResponse:
         if not cfg.get("enable_radarr_webhook"):
             logger.warning("[RADARR WEBHOOK] Radarr webhook is disabled, ignoring")
             return JsonResponse({"status": "disabled", "message": "Radarr webhook is disabled"}, status=200)
+
+        if not automatic_downloads_enabled(cfg):
+            return _manual_mode_response("RADARR")
 
         expected_secret = cfg.get("radarr_webhook", {}).get("webhook_secret", "")
         if expected_secret:
@@ -462,7 +482,7 @@ def arr_status(request: HttpRequest) -> JsonResponse:
     Returns current ARR configuration state and recent activity.
     """
     try:
-        from ..arr.arr_service import _load_arr_config
+        from ..arr.arr_service import _load_arr_config, automatic_downloads_enabled
         from ..models import ArrMediaRequest, ArrWebhookEvent
 
         cfg = _load_arr_config()
@@ -491,6 +511,7 @@ def arr_status(request: HttpRequest) -> JsonResponse:
 
         return JsonResponse({
             "enabled": cfg.get("enabled", False),
+            "auto_download": automatic_downloads_enabled(cfg),
             "polling_enabled": cfg.get("enable_polling", False),
             "webhook_enabled": cfg.get("enable_seerr_webhook", False),
             "sonarr_webhook_enabled": cfg.get("enable_sonarr_webhook", False),

@@ -12,6 +12,7 @@ from .arr_service import (
     _enqueue_if_new,
     _extract_provider_from_tags,
     _load_arr_config,
+    automatic_downloads_enabled,
     download_episode,
     download_movie,
 )
@@ -79,7 +80,7 @@ def scan_missing() -> dict[str, Any]:
     return {
         "configured": bool(clients),
         "unreachable": [client.label for client in clients if client.label not in reachable],
-        "polling_active": bool(cfg.get("enabled") and cfg.get("enable_polling")),
+        "polling_active": bool(cfg.get("enabled") and cfg.get("enable_polling") and automatic_downloads_enabled(cfg)),
         "series": series,
         "movies": movies,
         "episode_total": sum(serie["episode_count"] for serie in series),

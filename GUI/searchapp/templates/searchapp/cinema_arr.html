@@ -9,14 +9,14 @@
 	aiuterebbero a leggerlo.
 {% endcomment %}
 
-{% block title %}ARR Queue — ARROWAR{% endblock %}
+{% block title %}ARR Queue — VibraVid{% endblock %}
 
 {% block content %}
 <div class="cn-pad" style="padding-top:34px">
 
 	<div class="cn-page-hd">
 		<h1 class="cn-blast">ARR Queue</h1>
-		<p>What ARROWAR has taken on from Sonarr, Radarr, webhooks and periodic polling.</p>
+		<p>What VibraVid has taken on from Sonarr, Radarr, webhooks and periodic polling.</p>
 	</div>
 
 	<div class="cn-slab">
@@ -31,9 +31,13 @@
 			<span class="cn-st {% if arr_enabled %}is-done{% else %}is-wait{% endif %}">
 				ARR {% if arr_enabled %}enabled{% else %}disabled{% endif %}
 			</span>
-			<span class="cn-st {% if polling_enabled %}is-done{% else %}is-wait{% endif %}">
-				Polling {% if polling_enabled %}enabled{% else %}disabled{% endif %}
-			</span>
+			{% if auto_download %}
+				<span class="cn-st {% if polling_enabled %}is-done{% else %}is-wait{% endif %}">
+					Polling {% if polling_enabled %}enabled{% else %}disabled{% endif %}
+				</span>
+			{% else %}
+				<span class="cn-st is-wait">Manual downloads only</span>
+			{% endif %}
 			<a class="cn-cta is-ghost" href="{% url 'arr_missing' %}">Missing from library</a>
 			<button class="cn-cta" type="button" id="cn-arr-sync">Sync now</button>
 		</span>

@@ -4,7 +4,7 @@
 	Sistema = quadro d'insieme + impostazioni, in una pagina sola (§1 e §7.1).
 {% endcomment %}
 
-{% block title %}Settings — ARROWAR{% endblock %}
+{% block title %}Settings — VibraVid{% endblock %}
 
 {% block content %}
 <div class="cn-pad" style="padding-top:34px">
@@ -44,13 +44,21 @@
 		<div class="cn-duo">
 			<div class="cn-box">
 				<h3>Providers <span class="cn-sp"></span><span class="cn-st is-done">{{ providers|length }}</span></h3>
-				<div class="cn-lines" style="gap:2px;max-height:340px;overflow-y:auto">
+				<div class="cn-row" style="margin:0 0 12px;gap:10px;align-items:center">
+					<p class="cn-sub" id="cn-site-summary" role="status" aria-live="polite" style="flex:1;margin:0">Checking which sites are reachable…</p>
+					<button class="cn-cta is-ghost" type="button" id="cn-site-check">Check again</button>
+				</div>
+				<div class="cn-lines" id="cn-site-list" style="gap:2px;max-height:340px;overflow-y:auto">
 					{% for p in providers %}
-						<div class="cn-ln" style="background:var(--cn-surf-2);padding:11px 15px">
-							<span class="cn-grow">
+						<div class="cn-ln" data-site="{{ p.name }}"{% if p.url %} data-site-checkable{% endif %} style="background:var(--cn-surf-2);padding:11px 15px">
+							<span class="cn-grow" style="min-width:0">
 								<span class="cn-t" style="font-size:14px">{{ p.name }}</span>
-								{% if p.category %}<span class="cn-s">{{ p.category }}</span>{% endif %}
+								<span class="cn-s" style="overflow-wrap:anywhere">
+									{% if p.url %}<a href="{{ p.url }}" target="_blank" rel="noopener noreferrer" style="color:inherit">{{ p.host }}</a>{% else %}No public URL{% endif %}{% if p.category %} · {{ p.category }}{% endif %}
+								</span>
+								<span class="cn-s" data-site-note hidden></span>
 							</span>
+							<span class="cn-st is-wait" data-site-badge>{% if p.url %}Checking{% else %}No URL{% endif %}</span>
 						</div>
 					{% empty %}
 						<p class="cn-empty" style="padding:14px 0">No providers loaded.</p>
@@ -158,11 +166,17 @@
 					<legend>What's on</legend>
 					<div style="display:grid;gap:11px">
 						<label class="cn-check"><input type="checkbox" id="arr-enabled"><span>ARR services</span></label>
-						<label class="cn-check"><input type="checkbox" id="arr-polling"><span>Periodic polling</span></label>
-						<label class="cn-check"><input type="checkbox" id="arr-webhook"><span>Seerr webhook</span></label>
-						<label class="cn-check"><input type="checkbox" id="arr-sonarr-webhook"><span>Sonarr webhook</span></label>
-						<label class="cn-check"><input type="checkbox" id="arr-radarr-webhook"><span>Radarr webhook</span></label>
-						<label class="cn-check"><input type="checkbox" id="arr-webhook-priority-enabled"><span>Prioritize native webhooks</span></label>
+						<div>
+							<label class="cn-check"><input type="checkbox" role="switch" id="arr-auto" aria-describedby="arr-auto-hint"><span>Automatic downloads</span></label>
+							<p class="cn-sub cn-check-hint" id="arr-auto-hint">Off: nothing is downloaded until you pick it in Missing from library or press Sync now.</p>
+						</div>
+						<div class="cn-subchecks" id="arr-auto-sources">
+							<label class="cn-check"><input type="checkbox" id="arr-polling"><span>Periodic polling</span></label>
+							<label class="cn-check"><input type="checkbox" id="arr-webhook"><span>Seerr webhook</span></label>
+							<label class="cn-check"><input type="checkbox" id="arr-sonarr-webhook"><span>Sonarr webhook</span></label>
+							<label class="cn-check"><input type="checkbox" id="arr-radarr-webhook"><span>Radarr webhook</span></label>
+							<label class="cn-check"><input type="checkbox" id="arr-webhook-priority-enabled"><span>Prioritize native webhooks</span></label>
+						</div>
 					</div>
 				</fieldset>
 			</div>
@@ -347,6 +361,7 @@
 	var URL_BINARIES = "{% url 'trigger_binaries_update' %}";
 	var URL_IMPORT = "{% url 'refresh_external_import' %}";
 	var URL_CLI_OPTIONS = "{% url 'site_cli_options_schema' %}";
+	var URL_SITE_STATUS = "{% url 'site_status' %}";
 	var CSRF         = "{{ csrf_token }}";
 
 	function el(id) { return document.getElementById(id); }
@@ -362,6 +377,70 @@
 			: kind === "bad" ? "var(--cn-hot)"
 			: "var(--cn-mute)";
 	}
+
+	var SITE_BADGES = {
+		up:        ["is-done", "Online"],
+		moved:     ["is-warn", "Domain changed"],
+		error:     ["is-warn", "Error"],
+		down:      ["is-dead", "Unreachable"],
+		checking:  ["is-wait", "Checking"],
+		unchecked: ["is-wait", "Not checked"],
+		unknown:   ["is-wait", "No URL"]
+	};
+
+	function paintSite(row, info) {
+		var badge = row.querySelector("[data-site-badge]");
+		var note = row.querySelector("[data-site-note]");
+		var look = SITE_BADGES[info.state] || SITE_BADGES.unknown;
+		badge.className = "cn-st " + look[0];
+		badge.textContent = info.state === "error" ? "HTTP " + info.http_status : look[1];
+		note.hidden = info.state !== "moved";
+		note.textContent = "";
+		if (info.state !== "moved") return;
+		note.append("Now redirects to ");
+		var link = document.createElement("a");
+		link.href = info.final_url;
+		link.target = "_blank";
+		link.rel = "noopener noreferrer";
+		link.style.color = "var(--cn-amber)";
+		link.textContent = info.final_host;
+		note.append(link);
+	}
+
+	function checkSites(refresh) {
+		var btn = el("cn-site-check"), summary = el("cn-site-summary");
+		var rows = el("cn-site-list").querySelectorAll("[data-site-checkable]");
+		btn.disabled = true;
+		say(summary, "Checking which sites are reachable…");
+		rows.forEach(function (row) {
+			paintSite(row, { state: "checking" });
+		});
+		fetch(URL_SITE_STATUS + (refresh ? "?refresh=1" : ""))
+			.then(function (r) {
+				if (!r.ok) throw new Error("HTTP " + r.status);
+				return r.json();
+			})
+			.then(function (data) {
+				var byName = {};
+				(data.sites || []).forEach(function (info) { byName[info.site] = info; });
+				var problems = [];
+				rows.forEach(function (row) {
+					var info = byName[row.dataset.site] || { state: "unchecked" };
+					paintSite(row, info);
+					if (info.state !== "up") problems.push(row.dataset.site);
+				});
+				say(summary, problems.length ? "Needs attention: " + problems.join(", ") : "All sites with a URL are online.",
+					problems.length ? "bad" : "good");
+			})
+			.catch(function (err) {
+				rows.forEach(function (row) { paintSite(row, { state: "unchecked" }); });
+				say(summary, "Check failed: " + err.message, "bad");
+			})
+			.finally(function () { btn.disabled = false; });
+	}
+
+	el("cn-site-check").addEventListener("click", function () { checkSites(true); });
+	checkSites(false);
 
 	// ── schede ──────────────────────────────────────────────────────────────
 	var tabs = el("cn-tabs");
@@ -431,9 +510,17 @@
 	var arrMsg = el("cn-arr-msg");
 	var arrOriginal = {};
 
+	function syncAutoSources() {
+		var auto = el("arr-auto").checked;
+		el("arr-auto-sources").querySelectorAll("input").forEach(function (input) { input.disabled = !auto; });
+	}
+	el("arr-auto").addEventListener("change", syncAutoSources);
+
 	function fillArr(arr) {
 		arr = arr || {};
 		el("arr-enabled").checked = !!arr.enabled;
+		el("arr-auto").checked = arr.auto_download !== false;
+		syncAutoSources();
 		el("arr-polling").checked = arr.enable_polling !== false;
 		el("arr-webhook").checked = !!arr.enable_seerr_webhook;
 		el("arr-sonarr-webhook").checked = !!arr.enable_sonarr_webhook;
@@ -456,6 +543,7 @@
 	function readArr() {
 		return {
 			enabled: el("arr-enabled").checked,
+			auto_download: el("arr-auto").checked,
 			enable_polling: el("arr-polling").checked,
 			enable_seerr_webhook: el("arr-webhook").checked,
 			enable_sonarr_webhook: el("arr-sonarr-webhook").checked,
@@ -524,10 +612,14 @@
 				if (!data.enabled) { el("cn-arr-state").textContent = "disabled"; return; }
 
 				var on = [];
-				if (data.polling_enabled) on.push("polling");
-				if (data.webhook_enabled) on.push("Seerr");
-				if (data.sonarr_webhook_enabled) on.push("Sonarr");
-				if (data.radarr_webhook_enabled) on.push("Radarr");
+				if (data.auto_download === false) {
+					on.push("manual only");
+				} else {
+					if (data.polling_enabled) on.push("polling");
+					if (data.webhook_enabled) on.push("Seerr");
+					if (data.sonarr_webhook_enabled) on.push("Sonarr");
+					if (data.radarr_webhook_enabled) on.push("Radarr");
+				}
 				var s = data.stats || {};
 				el("cn-arr-state").textContent =
 					(on.length ? on.join(" + ") : "active") +

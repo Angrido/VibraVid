@@ -50,6 +50,7 @@ urlpatterns = [
     path("api/upload-service/", views.upload_service_zip, name="upload_service_zip"),
     path("api/remove-service/", views.remove_service_view, name="remove_service"),
     path("api/registry-status/", views.registry_status, name="registry_status"),
+    path("api/site-status/", views.site_status, name="site_status"),
     path("api/site-cli-options/", views.site_cli_options_schema, name="site_cli_options_schema"),
 
     # Logs

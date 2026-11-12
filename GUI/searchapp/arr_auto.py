@@ -17,7 +17,12 @@ def _should_start_loop() -> bool:
 
 def _arr_loop() -> None:
     """Main background loop for ARR polling."""
-    from .arr.arr_service import _load_arr_config, _reconcile_orphaned_downloads, trigger_polling_sync
+    from .arr.arr_service import (
+        _load_arr_config,
+        _reconcile_orphaned_downloads,
+        automatic_downloads_enabled,
+        trigger_polling_sync,
+    )
 
     # Any queue row left in 'Downloading' at startup is orphaned by a previous
     # crash/restart (nothing is running yet), so recover them unconditionally.
@@ -40,7 +45,7 @@ def _arr_loop() -> None:
                 time.sleep(30)
                 continue
 
-            if not cfg.get("enable_polling"):
+            if not cfg.get("enable_polling") or not automatic_downloads_enabled(cfg):
                 time.sleep(30)
                 continue
 
