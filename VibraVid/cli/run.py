@@ -1,11 +1,9 @@
 # 10.12.23
 
 import argparse
-import json
 import logging
 import os
 import re
-import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -27,6 +25,7 @@ from VibraVid.services._base.site_extra_args import resolve_persisted_site_optio
 from VibraVid.services._base.site_loader import site_codes
 from VibraVid.setup import CLI_ORIGIN, parse_cdm_cli, validate_cdm_settings
 from VibraVid.setup.binary_paths import binary_paths
+from VibraVid.setup.dependencies import external_dependencies, probe_binary_version
 from VibraVid.setup.system import (
     _initialize_paths,
     get_ffmpeg_path,
@@ -61,15 +60,6 @@ CATEGORY_LABELS = {"serie": "Serie/Film"}
 
 CLOSE_CONSOLE = config_manager.config.get_bool("DEFAULT", "close_console")
 PERSISTENT_ARGS = {"use_proxy", "proxy_scope", "extension", "close_console"}
-_VERSION_FLAGS = {
-    "FFmpeg": ["-version"],
-    "FFprobe": ["-version"],
-    "dovi_tool": ["--version"],
-    "mkvmerge": ["--version"],
-    "mkvpropedit": ["--version"],
-    "yt-dlp": ["--version"],
-    "deno": ["--version"],
-}
 _DRM_ALIASES = {"wv": "widevine", "pr": "playready"}
 
 
@@ -540,41 +530,6 @@ def get_logs_directory() -> str:
     return str(logs_dir)
 
 
-def _extract_version(text: str) -> str:
-    """Pull a version-like token (e.g. 6.1.1, v80.0, 1.6.0.0) out of CLI output."""
-    lines = text.splitlines()
-    for line in lines:
-        if "version" in line.lower():
-            m = re.search(r"v?(\d+(?:\.\d+){1,3})", line)
-            if m:
-                return m.group(1)
-
-    m = re.search(r"v?(\d+(?:\.\d+){1,3})", text)
-    return m.group(1) if m else ""
-
-
-def _probe_binary_version(dep_name: str, path: str) -> str:
-    """Best-effort version string for an external binary; '' if it cannot be determined."""
-    if not path:
-        return ""
-
-    try:
-        if dep_name == "Velora":
-            out = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=5)
-            raw = (out.stdout or out.stderr).strip()
-            first = raw.splitlines()[0] if raw else ""
-            try:
-                return str(json.loads(first).get("version", "")) or _extract_version(raw)
-            except Exception:
-                return _extract_version(raw)
-
-        flags = _VERSION_FLAGS.get(dep_name, ["--version"])
-        out = subprocess.run([path, *flags], capture_output=True, text=True, timeout=5)
-        return _extract_version(f"{out.stdout}\n{out.stderr}")
-    except Exception:
-        return ""
-
-
 def show_dependencies(search_functions):
     """Show all dependency paths: config files, services, and external binaries."""
     console.print(f"  [yellow]Config:[/] [white]{config_manager.config_file_path}[/]")
@@ -583,36 +538,13 @@ def show_dependencies(search_functions):
     console.print(f"  [yellow]Binary:[/] [white]{binary_paths.get_binary_directory()}[/]")
     console.print()
 
-    from VibraVid.setup.checker import (
-        check_deno,
-        check_dovi_tool,
-        check_ffmpeg,
-        check_flux,
-        check_mkvmerge,
-        check_mkvpropedit,
-        check_velora,
-        check_yt_dlp,
-    )
     from VibraVid.setup.device_install import check_device_prd_path, check_device_wvd_path
-    ffmpeg_path, ffprobe_path = check_ffmpeg(download=False)
 
     console.print("[bold cyan]External Dependencies:")
-    deps = {
-        "FFmpeg": ffmpeg_path,
-        "FFprobe": ffprobe_path,
-        "flux": check_flux(download=False),
-        "dovi_tool": check_dovi_tool(download=False),
-        "mkvmerge": check_mkvmerge(download=False),
-        "mkvpropedit": check_mkvpropedit(download=False),
-        "Velora": check_velora(download=False),
-        "yt-dlp": check_yt_dlp(download=False),
-        "deno": check_deno(download=False),
-    }
-
-    for dep_name, dep_path in deps.items():
+    for dep_name, dep_path in external_dependencies():
         status = "[green]OK[/]" if dep_path else "[red]NO[/]"
         path_display = dep_path if dep_path else "[red]Not found[/]"
-        version = _probe_binary_version(dep_name, dep_path) if dep_path else ""
+        version = probe_binary_version(dep_name, dep_path) if dep_path else ""
         version_display = f" [green](v{version})[/]" if version else ""
         console.print(f"  {status} [yellow]{dep_name}:[/]{version_display} [white]{path_display}[/]")
     console.print()

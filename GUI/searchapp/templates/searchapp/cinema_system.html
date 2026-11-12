@@ -31,6 +31,9 @@
 		</span>
 	</div>
 
+	<p class="cn-sub" id="cn-deps-warn" role="alert" hidden
+		style="color:var(--cn-hot);font-size:13px;margin:0 0 16px;padding:12px 15px;border:1px solid var(--cn-hot);border-radius:var(--cn-radius-sm)"></p>
+
 	<div class="cn-switch" id="cn-tabs">
 		<button type="button" data-tab="view"   aria-selected="true">Overview</button>
 		<button type="button" data-tab="config" aria-selected="false">config.toml</button>
@@ -313,6 +316,9 @@
 					through the app update: they're checked against AstraeLabs/Binary and
 					re-downloaded from here if outdated.
 				</p>
+				<div class="cn-lines" id="cn-deps" style="gap:2px;margin-bottom:15px" aria-live="polite">
+					<p class="cn-sub">Checking installed tools…</p>
+				</div>
 				<div class="cn-row">
 					<p class="cn-sub" id="cn-binaries-msg" style="flex:1"></p>
 					<button class="cn-cta" type="button" id="cn-binaries">Update binaries</button>
@@ -359,6 +365,7 @@
 	var URL_UPLOAD   = "{% url 'upload_service_zip' %}";
 	var URL_REMOVE   = "{% url 'remove_service' %}";
 	var URL_BINARIES = "{% url 'trigger_binaries_update' %}";
+	var URL_DEPENDENCIES = "{% url 'dependencies_status' %}";
 	var URL_IMPORT = "{% url 'refresh_external_import' %}";
 	var URL_CLI_OPTIONS = "{% url 'site_cli_options_schema' %}";
 	var URL_SITE_STATUS = "{% url 'site_status' %}";
@@ -938,6 +945,55 @@
 	});
 
 	// ── Binaries ──────────────────────────────────────────────────────────────
+	function depRow(dep) {
+		var row = document.createElement("div");
+		row.className = "cn-ln";
+		row.style.cssText = "background:var(--cn-surf-2);padding:11px 15px;gap:12px";
+		var grow = document.createElement("span");
+		grow.className = "cn-grow";
+		grow.style.minWidth = "0";
+		var name = document.createElement("span");
+		name.className = "cn-t";
+		name.style.fontSize = "14px";
+		name.textContent = dep.name + (dep.version ? " " + dep.version : "");
+		var where = document.createElement("span");
+		where.className = "cn-sub";
+		where.style.cssText = "display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+		where.textContent = dep.path || (dep.required ? t("Required, not found") : t("Optional, not installed"));
+		if (dep.path) where.title = dep.path;
+		grow.appendChild(name);
+		grow.appendChild(where);
+		var badge = document.createElement("span");
+		badge.className = "cn-st " + (dep.found ? "is-done" : dep.required ? "is-dead" : "is-wait");
+		badge.textContent = dep.found ? "OK" : t("Missing");
+		row.appendChild(grow);
+		row.appendChild(badge);
+		return row;
+	}
+
+	function loadDependencies() {
+		var list = el("cn-deps"), warn = el("cn-deps-warn");
+		return fetch(URL_DEPENDENCIES)
+			.then(function (r) { return r.json(); })
+			.then(function (data) {
+				var deps = data.dependencies || [];
+				list.replaceChildren.apply(list, deps.map(depRow));
+				var missing = deps.filter(function (d) { return d.required && !d.found; })
+					.map(function (d) { return d.name; });
+				warn.hidden = missing.length === 0;
+				warn.textContent = missing.length
+					? t("Missing required tools: {names}. Downloads and muxing fail until they are installed (Extensions › Binaries).").replace("{names}", missing.join(", "))
+					: "";
+			})
+			.catch(function () {
+				var note = document.createElement("p");
+				note.className = "cn-sub";
+				note.textContent = t("Could not check the installed tools.");
+				list.replaceChildren(note);
+			});
+	}
+	loadDependencies();
+
 	el("cn-binaries").addEventListener("click", function () {
 		var btn = this, msg = el("cn-binaries-msg");
 		btn.disabled = true;
@@ -952,6 +1008,7 @@
 					return tool + ": " + data.results[tool].message;
 				});
 				say(msg, lines.join(" | "), "good");
+				return loadDependencies();
 			})
 			.catch(function (err) { say(msg, "Failed: " + err.message, "bad"); })
 			.finally(function () { btn.disabled = false; });

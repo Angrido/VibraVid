@@ -530,5 +530,10 @@
   "Select the missing episodes of season {n}": "Seleziona gli episodi mancanti della stagione {n}",
   "Select the missing specials": "Seleziona gli speciali mancanti",
   "Specials": "Speciali",
-  "Sonarr has no episodes for this series yet.": "Sonarr non ha ancora episodi per questa serie."
+  "Sonarr has no episodes for this series yet.": "Sonarr non ha ancora episodi per questa serie.",
+  "Checking installed tools…": "Controllo degli strumenti installati…",
+  "Required, not found": "Obbligatorio, non trovato",
+  "Optional, not installed": "Facoltativo, non installato",
+  "Missing required tools: {names}. Downloads and muxing fail until they are installed (Extensions › Binaries).": "Mancano strumenti obbligatori: {names}. Download e muxing falliscono finché non li installi (Estensioni › Binari).",
+  "Could not check the installed tools.": "Impossibile controllare gli strumenti installati."
 }
