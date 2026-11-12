@@ -186,6 +186,10 @@ def _inspect_media(api, item, data):
             return JsonResponse({"qualities": [], "audio_supported": True, "audio_languages": [],
                                  "message": "No episode is available in the selected language."})
         description += f" S{season} E{episode}"
+    return JsonResponse(track_report(api, item, season, episode, description))
+
+
+def track_report(api, item, season, episode, description: str) -> dict:
     from VibraVid.core.utils.quality import normalize_quality
     qualities = set()
     for candidate in api.get_available_qualities(item, season, episode):
@@ -200,10 +204,10 @@ def _inspect_media(api, item, data):
         audio_supported = True
     except (NotImplementedError, AttributeError):
         audio_languages, audio_supported = [], False
-    return JsonResponse({"qualities": sorted(qualities, key=lambda q: int(q[:-1]), reverse=True),
-                         "audio_languages": audio_languages, "audio_supported": audio_supported,
-                         "sample": description,
-                         "message": "For batches, availability is checked again for each episode." if season is not None else ""})
+    return {"qualities": sorted(qualities, key=lambda q: int(q[:-1]), reverse=True),
+            "audio_languages": audio_languages, "audio_supported": audio_supported,
+            "sample": description,
+            "message": "For batches, availability is checked again for each episode." if season is not None else ""}
 
 
 __all__ = ['series_metadata', 'start_download', 'available_qualities']
