@@ -24,6 +24,7 @@ def _load_arr_config() -> dict:
     """Load the 'arr' section from Conf/config.toml, with env-var overrides."""
     arr_cfg = {
         "enabled": False,
+        "auto_download": True,
         "enable_polling": True,
         "enable_seerr_webhook": False,
         "enable_sonarr_webhook": False,
@@ -73,6 +74,8 @@ def _load_arr_config() -> dict:
 
     if _env("USE_ARR_SERVICES") is not None:
         arr_cfg["enabled"] = _env_bool("USE_ARR_SERVICES")
+    if _env("ARR_AUTO_DOWNLOAD") is not None:
+        arr_cfg["auto_download"] = _env_bool("ARR_AUTO_DOWNLOAD")
     if _env("ENABLE_ARR_POLLING") is not None:
         arr_cfg["enable_polling"] = _env_bool("ENABLE_ARR_POLLING")
     if _env("ENABLE_SEERR_WEBHOOK") is not None:
@@ -120,6 +123,10 @@ def _load_arr_config() -> dict:
         arr_cfg["radarr_webhook"]["webhook_secret"] = _env("RADARR_WEBHOOK_SECRET")
 
     return arr_cfg
+
+
+def automatic_downloads_enabled(cfg: dict) -> bool:
+    return bool(cfg.get("auto_download", True))
 
 
 def _build_clients(cfg: dict):

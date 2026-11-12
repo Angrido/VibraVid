@@ -38,6 +38,7 @@ Media library
 ```toml
 [ARR]
 enabled = false
+auto_download = true
 enable_polling = false
 enable_seerr_webhook = false
 enable_sonarr_webhook = false
@@ -74,6 +75,7 @@ webhook_secret = ""
 | Key | Default | Description |
 |-----|---------|-------------|
 | `enabled` | `false` | Enables the ARR integration globally |
+| `auto_download` | `true` | Master switch for automatic downloads. When `false`, polling and the Seerr/Sonarr/Radarr webhooks never start a download: only Missing from library and Sync now do |
 | `enable_polling` | `false` | Periodically scans Sonarr/Radarr for missing media |
 | `enable_seerr_webhook` | `false` | Enables the Seerr/Jellyseerr webhook endpoint |
 | `enable_sonarr_webhook` | `false` | Enables the Sonarr native webhook endpoint |
@@ -113,6 +115,7 @@ SONARR_WEBHOOK_SECRET=your-secret
 RADARR_WEBHOOK_SECRET=your-secret
 
 # Less commonly needed, but also read from the environment:
+ARR_AUTO_DOWNLOAD=false               # auto_download
 ENABLE_ARR_POLLING=true               # enable_polling
 ARR_POLLING_INTERVAL=300              # polling_interval (seconds)
 ARR_FULL_RESYNC_INTERVAL=21600        # full_resync_interval (seconds)
@@ -188,7 +191,7 @@ Both modes can be enabled together. Native Sonarr/Radarr webhooks can be priorit
 
 Each row has a **Check languages** button. It finds the title on the provider VibraVid would use and lists the audio tracks it offers, marking the ones that match `select_audio`, so you can skip a release that is only in a language you do not want. Providers that cannot inspect tracks before downloading say so; your configured languages are still enforced when the download runs.
 
-This page only needs the Sonarr/Radarr URL and API key. For full manual control, turn off `enable_polling`: otherwise polling keeps downloading missing items automatically.
+This page only needs the Sonarr/Radarr URL and API key. For full manual control, turn off **Automatic downloads** in Settings > ARR (`auto_download = false`): polling and webhooks then never start a download on their own.
 
 ## Monitored items
 

@@ -199,3 +199,18 @@ def test_webhook_does_not_log_parsed_test_payload(client, monkeypatch, caplog, u
     assert response.status_code == 200
     assert secret not in caplog.text
     assert "sensitive-json-payload-value" not in caplog.text
+
+
+@pytest.mark.parametrize("url, section, flag", WEBHOOKS)
+def test_webhook_downloads_nothing_when_automatic_downloads_are_off(client, monkeypatch, url, section, flag):
+    def must_not_sync(*args, **kwargs):
+        raise AssertionError("a webhook started a download in manual mode")
+
+    for name in ("trigger_webhook_sync", "trigger_sonarr_webhook_sync", "trigger_radarr_webhook_sync"):
+        monkeypatch.setattr(arr_service, name, must_not_sync)
+    _arr_config(monkeypatch, auto_download=False)
+    payload = {"notification_type": "MEDIA_APPROVED", "eventType": "Download", "media": {"tmdbId": 1, "media_type": "movie"}}
+
+    response = _post(client, url, payload)
+
+    assert response.status_code == 200 and response.json()["status"] == "manual"
