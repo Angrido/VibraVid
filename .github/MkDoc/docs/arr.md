@@ -184,7 +184,9 @@ Both modes can be enabled together. Native Sonarr/Radarr webhooks can be priorit
 
 ### Choosing what to download
 
-**Settings → Missing from library** (`/arr-missing/`) lists every monitored episode and movie that Sonarr and Radarr are still waiting for, with the same tag rules as polling (`hold`, `skip-sN`, whitelist/blacklist). Nothing starts on its own: tick the episodes, seasons or movies you want and press **Download selected**. Items already in VibraVid's ARR queue are marked and cannot be picked twice.
+**Library** in the top menu (`/arr/`) shows every series in Sonarr and every movie in Radarr as a poster grid, with a badge for what is complete, missing, not aired yet or not monitored. Filter by title, by type, or keep only the titles with something missing. Opening a series shows its seasons with progress and every episode with its state; aired, monitored episodes without a file can be ticked one by one or a season at a time, checked for languages and sent with **Download selected**. A movie page does the same for a missing movie. Specials (season 0) are listed but not selectable, as with polling.
+
+**Missing from library** (`/arr-missing/`) lists every monitored episode and movie that Sonarr and Radarr are still waiting for, with the same tag rules as polling (`hold`, `skip-sN`, whitelist/blacklist). Nothing starts on its own: tick the episodes, seasons or movies you want and press **Download selected**. Items already in VibraVid's ARR queue are marked and cannot be picked twice.
 
 Each row has a **Check languages** button. It finds the title on the provider VibraVid would use and lists the audio tracks it offers, marking the ones that match `select_audio`, so you can skip a release that is only in a language you do not want. Providers that cannot inspect tracks before downloading say so; your configured languages are still enforced when the download runs.
 

@@ -7,7 +7,7 @@ import time
 
 from django.db import transaction
 from django.db.models import Q
-from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -55,8 +55,7 @@ def arr_stack(request: HttpRequest) -> HttpResponse:
     filtered_count = queue_entries.count()
 
     return render(request, "searchapp/cinema_arr.html", {
-        # La coda ARR vive sotto Sistema: la voce di menu resta accesa quella.
-        "nav_active": "sistema",
+        "nav_active": "arr",
         "arr_enabled": cfg.get("enabled", False),
         "polling_enabled": cfg.get("enable_polling", False),
         "entries": queue_entries[:300],
@@ -615,7 +614,7 @@ def arr_missing(request: HttpRequest) -> HttpResponse:
     except Exception:
         logger.exception("Missing library scan failed")
         scan, scan_failed = {"configured": True, "unreachable": [], "series": [], "movies": [], "episode_total": 0}, True
-    return render(request, "searchapp/cinema_arr_missing.html", {"nav_active": "sistema", "scan_failed": scan_failed, **scan})
+    return render(request, "searchapp/cinema_arr_missing.html", {"nav_active": "arr", "scan_failed": scan_failed, **scan})
 
 
 @require_http_methods(["POST"])
@@ -684,5 +683,48 @@ def arr_missing_check(request: HttpRequest) -> JsonResponse:
     })
 
 
+@require_http_methods(["GET"])
+def arr_library(request: HttpRequest) -> HttpResponse:
+    from ..arr.library_service import scan_library
+
+    return render(request, "searchapp/cinema_arr_library.html", {"nav_active": "arr", **scan_library()})
+
+
+def _arr_title_page(request: HttpRequest, load, arr_id: int) -> HttpResponse:
+    import requests
+
+    from ..arr.manual_service import ArrNotConfigured
+
+    context = {"nav_active": "arr", "configured": True, "failed": False}
+    try:
+        context.update(load(arr_id))
+    except ArrNotConfigured:
+        context["configured"] = False
+    except requests.HTTPError as exc:
+        if exc.response is not None and exc.response.status_code == 404:
+            raise Http404 from exc
+        logger.exception("ARR title %s could not be loaded", arr_id)
+        context["failed"] = True
+    except requests.RequestException:
+        logger.exception("ARR title %s could not be loaded", arr_id)
+        context["failed"] = True
+    return render(request, "searchapp/cinema_arr_title.html", context)
+
+
+@require_http_methods(["GET"])
+def arr_series_detail(request: HttpRequest, series_id: int) -> HttpResponse:
+    from ..arr.library_service import series_detail
+
+    return _arr_title_page(request, series_detail, series_id)
+
+
+@require_http_methods(["GET"])
+def arr_movie_detail(request: HttpRequest, movie_id: int) -> HttpResponse:
+    from ..arr.library_service import movie_detail
+
+    return _arr_title_page(request, movie_detail, movie_id)
+
+
 __all__ = ['arr_stack', 'seerr_webhook', 'sonarr_webhook', 'radarr_webhook', 'arr_status', 'arr_trigger_sync',
-           'arr_delete_request', 'arr_missing', 'arr_missing_download', 'arr_missing_check']
+           'arr_delete_request', 'arr_missing', 'arr_missing_download', 'arr_missing_check',
+           'arr_library', 'arr_series_detail', 'arr_movie_detail']

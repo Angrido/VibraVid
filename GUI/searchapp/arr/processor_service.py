@@ -8,10 +8,10 @@ from .clients.sonarr_client import SonarrClient
 logger = logging.getLogger("ARR")
 
 
-def poster_url(images: list[dict] | None) -> str:
+def poster_url(images: list[dict] | None, cover_type: str = "poster") -> str:
     for image in images or []:
         url = str(image.get("remoteUrl") or "")
-        if image.get("coverType") == "poster" and url.startswith(("https://", "http://")):
+        if image.get("coverType") == cover_type and url.startswith(("https://", "http://")):
             return url
     return ""
 
