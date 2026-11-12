@@ -101,7 +101,7 @@ def _terminate_process_tree(process: subprocess.Popen[str], graceful_timeout: fl
     try:
         process.wait(timeout=2.0)
     except Exception:
-        pass
+        logger.debug("Ignored error in a best-effort step", exc_info=True)
 
 
 def _stop_process_orderly(process: subprocess.Popen[str], graceful_timeout: float = 5.0) -> None:
@@ -306,7 +306,7 @@ def run_download_plan(
             try:
                 os.chmod(plan_path, 0o600)
             except Exception:
-                pass
+                logger.debug("Ignored error in a best-effort step", exc_info=True)
             json.dump(plan, tmp, ensure_ascii=False)
             tmp.flush()
 

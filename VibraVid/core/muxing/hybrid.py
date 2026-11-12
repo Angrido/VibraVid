@@ -195,7 +195,7 @@ def probe_media_file(file_path: str) -> dict[str, Any]:
 
             _signal.set_wakeup_fd(-1)
         except Exception:
-            pass
+            logger.debug("Ignored error in a best-effort step", exc_info=True)
 
     video_stream = next((item for item in stream_info if item.type.lower() == "video"), None)
     if video_stream:

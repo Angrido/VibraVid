@@ -297,7 +297,7 @@ if sys.platform == "win32":
                 _k32.FlushFileBuffers(h)
             _k32.DisconnectNamedPipe(h)
         except Exception:
-            pass
+            logger.debug("Ignored error in a best-effort step", exc_info=True)
         _k32.CloseHandle(h)
 
 
@@ -572,7 +572,7 @@ class NamedPipeMuxer:
             try:
                 p.close(graceful=False)
             except Exception:
-                pass
+                logger.debug("Ignored error in a best-effort step", exc_info=True)
         
         for q in self._queues:
             _drain_queue(q)

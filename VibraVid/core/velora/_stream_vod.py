@@ -555,7 +555,7 @@ class VodStreamMixin:
                 try:
                     decryptor.close_flux_daemon()
                 except Exception:
-                    pass
+                    logger.debug("Ignored error in a best-effort step", exc_info=True)
                 _cleanup()
 
         t = threading.Thread(target=_run, daemon=True, name=f"key-trial-{getattr(stream, 'id', '?')}")
@@ -591,7 +591,7 @@ class VodStreamMixin:
         try:
             bar_manager.handle_progress_line(line)
         except Exception:
-            pass
+            logger.debug("Ignored error in a best-effort step", exc_info=True)
 
     def _limit_segments(self, dl_segs: list[dict], label: str, keep_init: bool = True) -> list[dict]:
         """Apply ``--max-segments`` (``N`` or ``(start, end)``); the leading init segment is kept unless ``keep_init`` is False."""

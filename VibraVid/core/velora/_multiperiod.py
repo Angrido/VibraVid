@@ -194,8 +194,8 @@ def _ffmpeg_concat(part_files: list[Path], out_path: Path) -> bool:
     finally:
         try:
             list_path.unlink(missing_ok=True)
-        except Exception:
-            pass
+        except OSError as exc:
+            logger.debug("Could not remove a temporary path: %s", exc)
 
     if result.returncode != 0 or not out_path.exists() or out_path.stat().st_size <= 0:
         logger.error(f"[multiperiod] ffmpeg concat failed (rc={result.returncode}): {(result.stderr or '')[-800:]}")
@@ -205,8 +205,8 @@ def _ffmpeg_concat(part_files: list[Path], out_path: Path) -> bool:
         # remove it so downstream code doesn't mistake it for a complete track.
         try:
             out_path.unlink(missing_ok=True)
-        except Exception:
-            pass
+        except OSError as exc:
+            logger.debug("Could not remove a temporary path: %s", exc)
         return False
     return True
 
@@ -371,8 +371,8 @@ class MultiPeriodMixin:
                     logger.error(f"[multiperiod] Period {order_idx} decryption error: {exc}")
                     try:
                         dec_path.unlink(missing_ok=True)
-                    except Exception:
-                        pass
+                    except OSError as exc:
+                        logger.debug("Could not remove a temporary path: %s", exc)
 
             # Absolute fragment timestamps get reset later, in the Join Media
             # ffmpeg pass, same as the single-period pipeline does (see
@@ -415,5 +415,5 @@ class MultiPeriodMixin:
         for pf in part_files:
             try:
                 pf.unlink(missing_ok=True)
-            except Exception:
-                pass
+            except OSError as exc:
+                logger.debug("Could not remove a temporary path: %s", exc)

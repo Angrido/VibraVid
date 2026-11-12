@@ -24,8 +24,8 @@ class SegmentIOMixin:
                 if attempt > 1 and target_path.exists():
                     try:
                         target_path.unlink()
-                    except Exception:
-                        pass
+                    except OSError as exc:
+                        logger.debug("Could not remove a temporary path: %s", exc)
 
                 source_path.replace(target_path)
                 return

@@ -930,8 +930,8 @@ class DecryptPipelineMixin(
             if post_merge_path.exists():
                 try:
                     post_merge_path.unlink()
-                except Exception:
-                    pass
+                except OSError as exc:
+                    logger.debug("Could not remove a temporary path: %s", exc)
 
     def _record_decrypt_failure(self, ctx: _SegmentDownloadContext, out_path: Path, post_merge_path: Path, decrypt_t0: float) -> None:
         """Log a failed post-merge decrypt, mark the bar and remember it for the end-of-download report."""
@@ -955,8 +955,8 @@ class DecryptPipelineMixin(
         if post_merge_path.exists():
             try:
                 post_merge_path.unlink()
-            except Exception:
-                pass
+            except OSError as exc:
+                logger.debug("Could not remove a temporary path: %s", exc)
 
     def _report_merge_result(
         self, ctx: _SegmentDownloadContext, paths: list[Path], out_path: Path, decrypted_ok: bool, decrypt_already_reported: bool, live_merge_ok: bool

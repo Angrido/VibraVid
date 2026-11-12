@@ -393,7 +393,7 @@ class BaseDownloader:
             self.media_players = MediaPlayers(self.output_dir)
             self.media_players.create()
         except Exception:
-            pass
+            logger.debug("Ignored error in a best-effort step", exc_info=True)
 
     def _gui_aborted(self) -> bool:
         """True when the GUI stop button was pressed for this download."""

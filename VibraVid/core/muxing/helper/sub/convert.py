@@ -58,8 +58,8 @@ def convert_subtitle(subtitle_path: str, target_format: str, chunk_offsets: list
                 res = convert_subtitle(tmp_srt, "ass")
                 try:
                     os.remove(tmp_srt)
-                except Exception:
-                    pass
+                except OSError as exc:
+                    logger.debug("Could not remove a temporary path: %s", exc)
                 return res
 
         return None

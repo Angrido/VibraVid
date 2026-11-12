@@ -179,7 +179,7 @@ class MP4FileDownloader:
             try:
                 progress_bars.add_prebuilt_tasks([(self._task_key, self.label)])
             except Exception:
-                pass
+                logger.debug("Ignored error in a best-effort step", exc_info=True)
 
             client = create_client(headers=headers)
             try:
@@ -269,7 +269,7 @@ class MP4FileDownloader:
                 prev = signal.getsignal(signal.SIGINT)
                 signal.signal(signal.SIGINT, partial(self._interrupt.handle, original_handler=prev))
         except Exception:
-            pass
+            logger.debug("Ignored error in a best-effort step", exc_info=True)
 
     def _check_content_type(self, client, headers: dict) -> bool:
         try:
@@ -599,7 +599,7 @@ class MP4FileDownloader:
                 fh.flush()
                 os.fsync(fh.fileno())
             except Exception:
-                pass
+                logger.debug("Ignored error in a best-effort step", exc_info=True)
 
     def _should_stop_at_max_percentage(self) -> bool:
         if self.max_percentage >= 100.0 or not self._total:
@@ -647,7 +647,7 @@ class MP4FileDownloader:
                     segments=parsed.get("segments"),
                 )
             except Exception:
-                pass
+                logger.debug("Ignored error in a best-effort step", exc_info=True)
 
     def _run_decrypt(self, bar_mgr: DownloadBarManager) -> None:
         """Decrypt while continuing the same bar row in place."""

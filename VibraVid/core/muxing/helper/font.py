@@ -202,7 +202,7 @@ class FontManager:
                     name = os.path.splitext(f)[0]
                     fonts.append(name.lower())
             except Exception:
-                pass
+                logger.debug("Ignored error in a best-effort step", exc_info=True)
 
         # Registry paths for system and user fonts
         reg_paths = [
@@ -261,7 +261,7 @@ class FontManager:
                                 name = name.replace("-Regular", "").replace("Regular", "")
                                 fonts.append(name.lower().strip())
                 except Exception:
-                    pass
+                    logger.debug("Ignored error in a best-effort step", exc_info=True)
 
         return fonts
 
@@ -304,6 +304,6 @@ class FontManager:
                                 name = name.replace("-Regular", "").replace("Regular", "")
                                 fonts.append(name.lower().strip())
                 except Exception:
-                    pass
+                    logger.debug("Ignored error in a best-effort step", exc_info=True)
 
         return fonts

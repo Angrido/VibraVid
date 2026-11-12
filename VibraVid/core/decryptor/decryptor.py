@@ -163,7 +163,7 @@ class _FluxDaemon:
                 with self._stderr_lock:
                     self._stderr_lines.append(line)
         except Exception:
-            pass
+            logger.debug("Ignored error in a best-effort step", exc_info=True)
 
     def _take_job_stderr(self) -> list[str]:
         with self._stderr_lock:
@@ -226,7 +226,7 @@ class _FluxDaemon:
             try:
                 stderr_tail = (self._proc.stderr.read() or "")[-300:]
             except Exception:
-                pass
+                logger.debug("Ignored error in a best-effort step", exc_info=True)
             return False, f"daemon exited unexpectedly ({stderr_tail or 'no stderr'})"
 
         self._job_count += 1
@@ -308,7 +308,7 @@ class _FluxDaemon:
             try:
                 self._proc.kill()
             except Exception:
-                pass
+                logger.debug("Ignored error in a best-effort step", exc_info=True)
 
 
 class Decryptor:

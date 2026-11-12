@@ -231,7 +231,7 @@ class Generic_Downloader(BaseDownloader):
             if self._prev_sigbreak is not None and os.name == "nt" and hasattr(signal, "SIGBREAK"):
                 signal.signal(signal.SIGBREAK, self._prev_sigbreak)
         except Exception:
-            pass
+            logger.debug("Ignored error in a best-effort step", exc_info=True)
         finally:
             self._interrupt_installed = False
 
@@ -253,7 +253,7 @@ class Generic_Downloader(BaseDownloader):
             try:
                 signal.signal(signum, signal.SIG_DFL)
             except Exception:
-                pass
+                logger.debug("Ignored error in a best-effort step", exc_info=True)
             self._interrupt_installed = False
 
     @staticmethod
@@ -264,7 +264,7 @@ class Generic_Downloader(BaseDownloader):
                 bar_manager.set_status_text(text)
                 return
             except Exception:
-                pass
+                logger.debug("Ignored error in a best-effort step", exc_info=True)
         console.print(f"\n{text}\n")
 
     def _drain_interrupt_flags(self, bar_manager=None) -> None:
@@ -284,12 +284,12 @@ class Generic_Downloader(BaseDownloader):
                 try:
                     self._active_pipe_muxer.abort()
                 except Exception:
-                    pass
+                    logger.debug("Ignored error in a best-effort step", exc_info=True)
             if self._active_direct_relay is not None:
                 try:
                     self._active_direct_relay.close()
                 except Exception:
-                    pass
+                    logger.debug("Ignored error in a best-effort step", exc_info=True)
         else:
             self._announce("[red]Ctrl+C pressed again: force kill, skipping merge.", bar_manager)
             logger.warning("Interrupt 2/2 — force quit, skipping merge")
@@ -303,25 +303,25 @@ class Generic_Downloader(BaseDownloader):
             try:
                 md._stop_event.set()
             except Exception:
-                pass
+                logger.debug("Ignored error in a best-effort step", exc_info=True)
             try:
                 md._abort_event.set()
             except Exception:
-                pass
+                logger.debug("Ignored error in a best-effort step", exc_info=True)
             try:
                 md._cancel_all_loops()
             except Exception:
-                pass
+                logger.debug("Ignored error in a best-effort step", exc_info=True)
         if self._active_pipe_muxer is not None:
             try:
                 self._active_pipe_muxer.abort()
             except Exception:
-                pass
+                logger.debug("Ignored error in a best-effort step", exc_info=True)
         if self._active_direct_relay is not None:
             try:
                 self._active_direct_relay.close()
             except Exception:
-                pass
+                logger.debug("Ignored error in a best-effort step", exc_info=True)
 
     def _fetch_manifest_content(self, url: str, headers: dict[str, str]) -> str | None:
         """Fetch raw manifest text (needed only when a source forces a protocol, because the type auto-detection keys off the URL extension)."""
@@ -1329,11 +1329,11 @@ class Generic_Downloader(BaseDownloader):
             try:
                 md._stop_event.set()
             except Exception:
-                pass
+                logger.debug("Ignored error in a best-effort step", exc_info=True)
             try:
                 md._cancel_all_loops()
             except Exception:
-                pass
+                logger.debug("Ignored error in a best-effort step", exc_info=True)
 
     def _manifest_streaming_mux_eligible(self) -> bool:
         """True if conditions are met to attempt multi-manifest named-pipe live mux."""
