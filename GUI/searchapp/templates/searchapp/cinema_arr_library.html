@@ -34,6 +34,28 @@
 			</span>
 		</div>
 
+		<section class="lib-langbar" aria-labelledby="lib-lang-h">
+			<div class="lib-langbar-txt">
+				<h2 class="cn-tag" id="lib-lang-h">Italian audio check</h2>
+				<p class="lib-langbar-note">Checks which audio languages the providers offer for what is missing. It never starts a download.</p>
+				<p class="lib-langbar-status" id="lib-lang-status" role="status" aria-live="polite"
+				   data-running="{{ language.running|yesno:'1,' }}" data-done="{{ language.done }}" data-total="{{ language.total }}">
+					{% if language.running %}Checking {{ language.done }} of {{ language.total }}…{% elif language.last_checked %}<span>Last check</span> <time class="cn-num" data-lib-ts="{{ language.last_checked }}"></time>{% else %}Never checked yet.{% endif %}
+				</p>
+			</div>
+			<div class="lib-langbar-actions">
+				<div class="cn-fgroup">
+					<label class="cn-tag" for="lib-lang-interval">Automatic check</label>
+					<select class="cn-mini" id="lib-lang-interval">
+						{% for hours in interval_choices %}
+							<option value="{{ hours }}" {% if hours == language.interval_hours %}selected{% endif %}>{% if hours == 0 %}Off{% elif hours == 1 %}Every hour{% else %}Every {{ hours }} h{% endif %}</option>
+						{% endfor %}
+					</select>
+				</div>
+				<button class="cn-cta" type="button" id="lib-lang-all" {% if not missing_episodes and not missing_movies %}disabled{% endif %}>Check all missing</button>
+			</div>
+		</section>
+
 		{% for label in unreachable %}
 			<p class="cn-msg is-bad" role="alert">{{ label }} did not answer, so its titles are not listed. Check that it is running and that the API key is right.</p>
 		{% endfor %}
@@ -53,6 +75,7 @@
 					</div>
 				</div>
 				<button class="cn-opt lib-only" type="button" id="lib-missing" aria-pressed="false">Only with missing</button>
+				<button class="cn-opt lib-only" type="button" id="lib-italian" aria-pressed="false">Only with Italian audio</button>
 			</div>
 
 			{% if series %}
@@ -91,5 +114,9 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{% static 'searchapp/arr_library.js' %}?v={{ app_version }}"></script>
+<script src="{% static 'searchapp/arr_library.js' %}?v={{ app_version }}"
+        data-check-url="{% url 'arr_language_check_start' %}"
+        data-status-url="{% url 'arr_language_check_status' %}"
+        data-interval-url="{% url 'arr_language_check_interval' %}"
+        data-csrf="{{ csrf_token }}"></script>
 {% endblock %}

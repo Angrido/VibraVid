@@ -675,6 +675,18 @@ def arr_missing_states(request: HttpRequest) -> JsonResponse:
     })
 
 
+def _record_check(movie_id: int | None, match: dict, verdict: str, codes: list[str]) -> None:
+    from ..arr import language_check
+
+    if movie_id is not None:
+        title_key, media_key = language_check.movie_key(movie_id), language_check.movie_key(movie_id)
+    elif match.get("series_id") is not None:
+        title_key, media_key = language_check.serie_key(match["series_id"]), language_check.episode_key(match["episode_id"])
+    else:
+        return
+    language_check.record(media_key, title_key, verdict, codes, match.get("provider") or "")
+
+
 @require_http_methods(["POST"])
 def arr_missing_check(request: HttpRequest) -> JsonResponse:
     from searchapp.api import get_api
@@ -682,7 +694,9 @@ def arr_missing_check(request: HttpRequest) -> JsonResponse:
 
     from VibraVid.core.utils.audio_selection import configured_audio_languages, matches_audio_language
 
+    from ..arr import language_check
     from ..arr.manual_service import ArrNotConfigured, find_on_provider
+    from ..models import ArrLanguageCheck
     from .download import track_report
 
     body = _json_body(request)
@@ -692,9 +706,10 @@ def arr_missing_check(request: HttpRequest) -> JsonResponse:
         return JsonResponse({"status": "error", "message": "Choose one episode or one movie to check."}, status=400)
 
     try:
-        match = find_on_provider(movie_id=movie_id, episode_id=episode_id)
+        match = {**find_on_provider(movie_id=movie_id, episode_id=episode_id), "episode_id": episode_id}
         payload = match["payload"]
         if not payload:
+            _record_check(movie_id, match, ArrLanguageCheck.Verdict.NOT_FOUND, [])
             series_only = match.get("series_only")
             if series_only:
                 return JsonResponse({"status": "ok", "found": False, "series_only": True, **series_only,
@@ -713,6 +728,8 @@ def arr_missing_check(request: HttpRequest) -> JsonResponse:
         logger.exception("Language check failed")
         return JsonResponse({"status": "error", "message": "Unable to check languages right now. Retry in a moment."}, status=502)
 
+    codes = [language["code"] for language in report["audio_languages"]]
+    _record_check(movie_id, match, language_check.verdict_for(item.name or "", report["audio_supported"], codes), codes)
     wanted = configured_audio_languages()
     for language in report["audio_languages"]:
         language["wanted"] = any(matches_audio_language([language["code"]], w["code"]) for w in wanted)
@@ -728,11 +745,67 @@ def arr_missing_check(request: HttpRequest) -> JsonResponse:
     })
 
 
+@require_http_methods(["POST"])
+def arr_language_check_start(request: HttpRequest) -> JsonResponse:
+    import requests
+
+    from ..arr import language_check
+    from ..arr.manual_service import ArrNotConfigured
+
+    body = _json_body(request)
+    movie_ids, series_ids = _int_ids([body.get("movie")]), _int_ids([body.get("series")])
+    if body.get("scope") == "all":
+        scope = {"movie_ids": None, "series_ids": None}
+    elif len(movie_ids) + len(series_ids) == 1:
+        scope = {"movie_ids": movie_ids, "series_ids": series_ids}
+    else:
+        return JsonResponse({"status": "error", "message": "Choose one movie, one series or the whole library."}, status=400)
+    try:
+        started = language_check.start_check(**scope)
+    except ArrNotConfigured:
+        return JsonResponse({"status": "error", "message": "Sonarr and Radarr are not configured."}, status=400)
+    except requests.RequestException:
+        logger.exception("Italian audio check could not list the missing items")
+        return JsonResponse({"status": "error", "message": "Could not reach Sonarr or Radarr. Retry in a moment."}, status=502)
+    if not started:
+        return JsonResponse({"status": "error", "message": "A check is already running."}, status=409)
+    return JsonResponse({"status": "ok", **language_check.check_status()})
+
+
+@require_http_methods(["GET"])
+def arr_language_check_status(request: HttpRequest) -> JsonResponse:
+    from ..arr import language_check
+
+    return JsonResponse({"status": "ok", **language_check.check_status()})
+
+
+@require_http_methods(["POST"])
+def arr_language_check_interval(request: HttpRequest) -> JsonResponse:
+    from ..arr import language_check
+
+    hours = _json_body(request).get("hours")
+    if isinstance(hours, bool) or hours not in language_check.INTERVAL_HOURS:
+        return JsonResponse({"status": "error", "message": "Invalid interval."}, status=400)
+    try:
+        language_check.set_interval_hours(hours)
+    except OSError:
+        logger.exception("Could not save the Italian audio check interval")
+        return JsonResponse({"status": "error", "message": "Could not save the check interval. Please retry."}, status=500)
+    return JsonResponse({"status": "ok", "interval_hours": hours})
+
+
 @require_http_methods(["GET"])
 def arr_library(request: HttpRequest) -> HttpResponse:
+    from ..arr.language_check import INTERVAL_HOURS, check_status
     from ..arr.library_service import scan_library
 
-    return render(request, "searchapp/cinema_arr_library.html", {"nav_active": "arr", **scan_library()})
+    library = scan_library()
+    language = check_status()
+    for card in library["series"] + library["movies"]:
+        card["lang"] = language["titles"].get(f"{card['kind']}:{card['id']}") if card["missing"] else None
+    return render(request, "searchapp/cinema_arr_library.html", {
+        "nav_active": "arr", "language": language, "interval_choices": INTERVAL_HOURS, **library,
+    })
 
 
 def _arr_title_page(request: HttpRequest, load, arr_id: int) -> HttpResponse:
@@ -772,4 +845,5 @@ def arr_movie_detail(request: HttpRequest, movie_id: int) -> HttpResponse:
 
 __all__ = ['arr_stack', 'seerr_webhook', 'sonarr_webhook', 'radarr_webhook', 'arr_status', 'arr_trigger_sync',
            'arr_delete_request', 'arr_missing', 'arr_missing_download', 'arr_missing_states', 'arr_missing_check',
+           'arr_language_check_start', 'arr_language_check_status', 'arr_language_check_interval',
            'arr_library', 'arr_series_detail', 'arr_movie_detail']

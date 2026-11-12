@@ -61,6 +61,13 @@ class SearchappConfig(AppConfig):
         except Exception as exc:
             logger.exception("[ARR] Failed to start auto loop: %s", exc)
 
+        try:
+            from .arr.language_check import start_language_check_loop
+
+            start_language_check_loop()
+        except Exception as exc:
+            logger.exception("[ARR] Failed to start the Italian audio check loop: %s", exc)
+
         # Apply the download concurrency limit on startup
         try:
             from . import views

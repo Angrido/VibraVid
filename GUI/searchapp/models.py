@@ -162,3 +162,22 @@ class DownloadHistory(models.Model):
 
     def __str__(self):
         return f"{self.download_id} @ {self.created_at}"
+
+
+class ArrLanguageCheck(models.Model):
+    class Verdict(models.TextChoices):
+        AVAILABLE = "available", "Available"
+        ABSENT = "absent", "Absent"
+        UNKNOWN = "unknown", "Unknown"
+        NOT_FOUND = "not_found", "Not found"
+        FAILED = "failed", "Failed"
+
+    media_key = models.CharField(max_length=64, unique=True)
+    title_key = models.CharField(max_length=64, db_index=True)
+    verdict = models.CharField(max_length=16, choices=Verdict.choices)
+    languages = models.JSONField(default=list, blank=True)
+    provider = models.CharField(max_length=100, blank=True, default="")
+    checked_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.media_key}: {self.verdict}"

@@ -190,4 +190,5 @@ def find_on_provider(movie_id: int | None = None, episode_id: int | None = None)
         "episode": local_episode if local_episode is not None else ep_num,
         "series_only": None,
         "searched": downloader.searched_providers,
+        "series_id": series["id"],
     }
