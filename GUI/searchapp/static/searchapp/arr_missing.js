@@ -10,6 +10,8 @@
     const filter = document.getElementById("am-filter");
     const leaves = () => [...document.querySelectorAll("[data-am-episode], [data-am-movie]")];
     let holdBar = false;
+    const ACTIVE_STATES = ["pending", "downloading"];
+    let pollTimer = null;
 
     async function post(url, body) {
         const response = await fetch(url, {
@@ -114,16 +116,9 @@
             picked.forEach(input => {
                 input.checked = false;
                 input.disabled = true;
-                const row = input.closest(".am-row");
-                row.classList.add("is-sent");
-                let tag = row.querySelector(".am-state-tag");
-                if (!tag) {
-                    tag = document.createElement("span");
-                    row.querySelector(".am-pick").after(tag);
-                }
-                tag.className = "cn-st is-warn am-state-tag";
-                tag.textContent = tr("Queued");
+                input.closest(".am-row").classList.add("is-sent");
             });
+            refreshStates(picked.map(input => input.closest(".am-row").querySelector("[data-am-key]")));
             const notes = [tr("{n} queued for download.").replace("{n}", result.queued)];
             if (result.skipped) notes.push(tr("{n} already in the queue.").replace("{n}", result.skipped));
             if (result.gone) notes.push(tr("{n} no longer missing.").replace("{n}", result.gone));
@@ -138,6 +133,48 @@
             download.removeAttribute("aria-busy");
             render();
         }
+    });
+
+    function activeSlots() {
+        return [...document.querySelectorAll("[data-am-key]")].filter(slot => ACTIVE_STATES.includes(slot.dataset.amState));
+    }
+
+    function applyState(slot, entry) {
+        const active = ACTIVE_STATES.includes(entry.state);
+        slot.dataset.amState = entry.state;
+        slot.innerHTML = entry.html;
+        const row = slot.closest(".am-row");
+        const input = row.querySelector("[data-am-episode], [data-am-movie]");
+        input.disabled = active;
+        if (active) input.checked = false;
+        if (!active) row.classList.remove("is-sent");
+    }
+
+    async function refreshStates(slots) {
+        clearTimeout(pollTimer);
+        pollTimer = null;
+        const keys = [...new Set(slots.filter(Boolean).map(slot => slot.dataset.amKey))].slice(0, 500);
+        if (keys.length && !document.hidden) {
+            try {
+                const response = await fetch(config.statesUrl + "?keys=" + encodeURIComponent(keys.join(",")), {
+                    signal: AbortSignal.timeout(15000),
+                });
+                const data = await response.json();
+                if (response.ok && data.states) {
+                    document.querySelectorAll("[data-am-key]").forEach(slot => {
+                        const entry = data.states[slot.dataset.amKey];
+                        if (entry) applyState(slot, entry);
+                    });
+                    render();
+                }
+            } catch (_) {}
+        }
+        clearTimeout(pollTimer);
+        pollTimer = activeSlots().length ? setTimeout(() => refreshStates(activeSlots()), 3000) : null;
+    }
+
+    document.addEventListener("visibilitychange", () => {
+        if (!document.hidden && activeSlots().length) refreshStates(activeSlots());
     });
 
     function chip(language) {
@@ -254,4 +291,5 @@
     });
 
     render();
+    refreshStates(activeSlots());
 })();

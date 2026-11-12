@@ -19,7 +19,7 @@
 		<p>What VibraVid has taken on from Sonarr, Radarr, webhooks and periodic polling.</p>
 	</div>
 
-	<div class="cn-slab">
+	<div class="cn-slab" id="cn-arr-stats">
 		<div class="cn-big"><span class="cn-v">{{ total_count }}</span><span class="cn-k">Total</span></div>
 		<div class="cn-big"><span class="cn-v is-hot">{{ active_count }}</span><span class="cn-k">Open</span></div>
 		<div class="cn-big"><span class="cn-v">{{ status_counts.pending|default:"0" }}</span><span class="cn-k">Pending</span></div>
@@ -86,6 +86,7 @@
 		<button class="cn-cta" type="submit">Filter</button>
 	</form>
 
+	<div id="cn-arr-list">
 	<div class="cn-strip-hd" style="padding:0 0 15px">
 		<h2>Requests</h2>
 		<span class="cn-n">
@@ -165,6 +166,7 @@
 			Nothing queued. When Sonarr or Radarr request something, it shows up here.
 		</p>
 	{% endif %}
+	</div>
 </div>
 {% endblock %}
 
@@ -174,8 +176,11 @@
 (function () {
 	"use strict";
 
-	var btn = document.getElementById("cn-arr-sync");
 	var msg = document.getElementById("cn-arr-msg");
+	var LIVE_IDS = ["cn-arr-stats", "cn-arr-list"];
+	var REFRESH_MS = 4000;
+	var lastHtml = {};
+	var timer = null;
 
 	function say(text, kind) {
 		msg.textContent = text;
@@ -183,7 +188,46 @@
 		msg.className = "cn-msg" + (kind ? " is-" + kind : "");
 	}
 
-	if (btn) btn.addEventListener("click", function () {
+	function swapLive(doc) {
+		LIVE_IDS.forEach(function (id) {
+			var fresh = doc.getElementById(id);
+			var current = document.getElementById(id);
+			if (!fresh || !current || lastHtml[id] === fresh.innerHTML) return;
+			var wrap = current.querySelector(".cn-tablewrap");
+			var scrollLeft = wrap ? wrap.scrollLeft : 0;
+			lastHtml[id] = fresh.innerHTML;
+			current.replaceWith(fresh);
+			var freshWrap = fresh.querySelector(".cn-tablewrap");
+			if (freshWrap) freshWrap.scrollLeft = scrollLeft;
+		});
+	}
+
+	function refresh() {
+		clearTimeout(timer);
+		timer = null;
+		if (document.hidden) return Promise.resolve();
+		return fetch(window.location.href, { cache: "no-store" })
+			.then(function (r) { return r.ok ? r.text() : ""; })
+			.then(function (html) {
+				if (html) swapLive(new DOMParser().parseFromString(html, "text/html"));
+			})
+			.catch(function () {})
+			.then(function () {
+				clearTimeout(timer);
+				timer = setTimeout(refresh, REFRESH_MS);
+			});
+	}
+
+	LIVE_IDS.forEach(function (id) {
+		var node = document.getElementById(id);
+		if (node) lastHtml[id] = node.innerHTML;
+	});
+	timer = setTimeout(refresh, REFRESH_MS);
+	document.addEventListener("visibilitychange", function () {
+		if (!document.hidden) refresh();
+	});
+
+	function startSync(btn) {
 		btn.disabled = true;
 		say("Sync started…");
 
@@ -196,52 +240,55 @@
 				if (data.status === "error" || data.status === "disabled") {
 					throw new Error(data.message || "not started");
 				}
-				// La coda la riempie un thread in background: la pagina è resa
-				// dal server, quindi l'unico modo di vederne l'esito è ricaricarla.
-				say("Sync started. Reloading in a few seconds.", "good");
-				setTimeout(function () { window.location.reload(); }, 3000);
+				say("Sync started. The list updates by itself.", "good");
+				refresh();
 			})
 			.catch(function (err) {
 				say("Not started: " + err.message, "bad");
 				btn.disabled = false;
 			});
-	});
+	}
 
-	document.querySelectorAll(".cn-arr-delete").forEach(function (del) {
-		del.addEventListener("click", function () {
-			var title = del.dataset.title || "this request";
-			if (!window.confirm(
-				"Delete the ARR request for \"" + title + "\"?\n\n" +
-				"This removes the ARR queue/request entries only. " +
-				"Any downloaded file will be left untouched."
-			)) {
-				return;
-			}
+	function deleteRequest(del) {
+		var title = del.dataset.title || "this request";
+		if (!window.confirm(
+			"Delete the ARR request for \"" + title + "\"?\n\n" +
+			"This removes the ARR queue/request entries only. " +
+			"Any downloaded file will be left untouched."
+		)) {
+			return;
+		}
 
-			del.disabled = true;
-			say("Deleting…");
+		del.disabled = true;
+		say("Deleting…");
 
-			fetch(del.dataset.url, {
-				method: "POST",
-				headers: { "X-CSRFToken": "{{ csrf_token }}" }
-			})
-				.then(function (r) {
-					return r.json().then(function (data) {
-						if (!r.ok || data.status === "error") {
-							throw new Error(data.message || "delete failed");
-						}
-						return data;
-					});
-				})
-				.then(function () {
-					say("Request deleted. Reloading…", "good");
-					setTimeout(function () { window.location.reload(); }, 500);
-				})
-				.catch(function (err) {
-					say("Delete failed: " + err.message, "bad");
-					del.disabled = false;
+		fetch(del.dataset.url, {
+			method: "POST",
+			headers: { "X-CSRFToken": "{{ csrf_token }}" }
+		})
+			.then(function (r) {
+				return r.json().then(function (data) {
+					if (!r.ok || data.status === "error") {
+						throw new Error(data.message || "delete failed");
+					}
+					return data;
 				});
-		});
+			})
+			.then(function () {
+				say("Request deleted.", "good");
+				refresh();
+			})
+			.catch(function (err) {
+				say("Delete failed: " + err.message, "bad");
+				del.disabled = false;
+			});
+	}
+
+	document.addEventListener("click", function (event) {
+		var sync = event.target.closest("#cn-arr-sync");
+		if (sync) return startSync(sync);
+		var del = event.target.closest(".cn-arr-delete");
+		if (del) deleteRequest(del);
 	});
 })();
 </script>
