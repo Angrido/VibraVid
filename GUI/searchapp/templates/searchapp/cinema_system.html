@@ -166,11 +166,17 @@
 					<legend>What's on</legend>
 					<div style="display:grid;gap:11px">
 						<label class="cn-check"><input type="checkbox" id="arr-enabled"><span>ARR services</span></label>
-						<label class="cn-check"><input type="checkbox" id="arr-polling"><span>Periodic polling</span></label>
-						<label class="cn-check"><input type="checkbox" id="arr-webhook"><span>Seerr webhook</span></label>
-						<label class="cn-check"><input type="checkbox" id="arr-sonarr-webhook"><span>Sonarr webhook</span></label>
-						<label class="cn-check"><input type="checkbox" id="arr-radarr-webhook"><span>Radarr webhook</span></label>
-						<label class="cn-check"><input type="checkbox" id="arr-webhook-priority-enabled"><span>Prioritize native webhooks</span></label>
+						<div>
+							<label class="cn-check"><input type="checkbox" role="switch" id="arr-auto" aria-describedby="arr-auto-hint"><span>Automatic downloads</span></label>
+							<p class="cn-sub cn-check-hint" id="arr-auto-hint">Off: nothing is downloaded until you pick it in Missing from library or press Sync now.</p>
+						</div>
+						<div class="cn-subchecks" id="arr-auto-sources">
+							<label class="cn-check"><input type="checkbox" id="arr-polling"><span>Periodic polling</span></label>
+							<label class="cn-check"><input type="checkbox" id="arr-webhook"><span>Seerr webhook</span></label>
+							<label class="cn-check"><input type="checkbox" id="arr-sonarr-webhook"><span>Sonarr webhook</span></label>
+							<label class="cn-check"><input type="checkbox" id="arr-radarr-webhook"><span>Radarr webhook</span></label>
+							<label class="cn-check"><input type="checkbox" id="arr-webhook-priority-enabled"><span>Prioritize native webhooks</span></label>
+						</div>
 					</div>
 				</fieldset>
 			</div>
@@ -504,9 +510,17 @@
 	var arrMsg = el("cn-arr-msg");
 	var arrOriginal = {};
 
+	function syncAutoSources() {
+		var auto = el("arr-auto").checked;
+		el("arr-auto-sources").querySelectorAll("input").forEach(function (input) { input.disabled = !auto; });
+	}
+	el("arr-auto").addEventListener("change", syncAutoSources);
+
 	function fillArr(arr) {
 		arr = arr || {};
 		el("arr-enabled").checked = !!arr.enabled;
+		el("arr-auto").checked = arr.auto_download !== false;
+		syncAutoSources();
 		el("arr-polling").checked = arr.enable_polling !== false;
 		el("arr-webhook").checked = !!arr.enable_seerr_webhook;
 		el("arr-sonarr-webhook").checked = !!arr.enable_sonarr_webhook;
@@ -529,6 +543,7 @@
 	function readArr() {
 		return {
 			enabled: el("arr-enabled").checked,
+			auto_download: el("arr-auto").checked,
 			enable_polling: el("arr-polling").checked,
 			enable_seerr_webhook: el("arr-webhook").checked,
 			enable_sonarr_webhook: el("arr-sonarr-webhook").checked,
@@ -597,10 +612,14 @@
 				if (!data.enabled) { el("cn-arr-state").textContent = "disabled"; return; }
 
 				var on = [];
-				if (data.polling_enabled) on.push("polling");
-				if (data.webhook_enabled) on.push("Seerr");
-				if (data.sonarr_webhook_enabled) on.push("Sonarr");
-				if (data.radarr_webhook_enabled) on.push("Radarr");
+				if (data.auto_download === false) {
+					on.push("manual only");
+				} else {
+					if (data.polling_enabled) on.push("polling");
+					if (data.webhook_enabled) on.push("Seerr");
+					if (data.sonarr_webhook_enabled) on.push("Sonarr");
+					if (data.radarr_webhook_enabled) on.push("Radarr");
+				}
 				var s = data.stats || {};
 				el("cn-arr-state").textContent =
 					(on.length ? on.join(" + ") : "active") +

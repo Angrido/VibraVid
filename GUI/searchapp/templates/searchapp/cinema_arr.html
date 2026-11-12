@@ -31,9 +31,13 @@
 			<span class="cn-st {% if arr_enabled %}is-done{% else %}is-wait{% endif %}">
 				ARR {% if arr_enabled %}enabled{% else %}disabled{% endif %}
 			</span>
-			<span class="cn-st {% if polling_enabled %}is-done{% else %}is-wait{% endif %}">
-				Polling {% if polling_enabled %}enabled{% else %}disabled{% endif %}
-			</span>
+			{% if auto_download %}
+				<span class="cn-st {% if polling_enabled %}is-done{% else %}is-wait{% endif %}">
+					Polling {% if polling_enabled %}enabled{% else %}disabled{% endif %}
+				</span>
+			{% else %}
+				<span class="cn-st is-wait">Manual downloads only</span>
+			{% endif %}
 			<a class="cn-cta is-ghost" href="{% url 'arr_missing' %}">Missing from library</a>
 			<button class="cn-cta" type="button" id="cn-arr-sync">Sync now</button>
 		</span>

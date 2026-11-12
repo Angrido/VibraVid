@@ -42,7 +42,7 @@
 			<p class="cn-msg is-bad" role="alert">{{ label }} did not answer, so its missing items are not listed. Check that it is running and that the API key is right.</p>
 		{% endfor %}
 		{% if polling_active %}
-			<p class="cn-msg is-warn">Automatic polling is on, so missing items may also be downloaded without asking. Turn off polling in the ARR settings to decide everything from this page.</p>
+			<p class="cn-msg is-warn">Automatic polling is on, so missing items may also be downloaded without asking. Turn off automatic downloads in the ARR settings to decide everything from this page.</p>
 		{% endif %}
 
 		{% if series or movies %}
