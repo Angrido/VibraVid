@@ -359,6 +359,11 @@ def _run_download_in_thread(
             context_tracker.season = int(season) if str(season or "").isdigit() else 0
             context_tracker.episode = int(episodes) if str(episodes or "").isdigit() else 0
             context_tracker.site_options = _resolve_persisted_site_options(site)
+            context_tracker.retry_request = {
+                "site": site, "payload": item_payload, "season": season, "episodes": episodes,
+                "media_type": media_type, "quality": quality, "audio_language": audio_language,
+                "audio_format": audio_format,
+            }
 
             api = get_api(site)
 
@@ -439,6 +444,7 @@ def _run_download_in_thread(
             context_tracker.series_tmdb_id = None
             context_tracker.is_cancelled_callback = None
             context_tracker.site_options = None
+            context_tracker.retry_request = None
             if slot_held:
                 _release_download_slot()
 

@@ -167,6 +167,7 @@ class DownloadTracker(metaclass=SingletonMeta):
                 "tasks": {},  # For multi-stream downloads (video, audio, etc)
                 "cli_search": context_tracker.cli_search,
                 "cli_item": context_tracker.cli_item,
+                "retry": context_tracker.retry_request,
             }
             hook_context = {
                 "download_id": download_id,
@@ -835,6 +836,14 @@ class ContextTracker:
     @fallback_poster_url.setter
     def fallback_poster_url(self, value):
         self.local.fallback_poster_url = value
+
+    @property
+    def retry_request(self):
+        return getattr(self.local, "retry_request", None)
+
+    @retry_request.setter
+    def retry_request(self, value):
+        self.local.retry_request = value
 
     @property
     def series_tmdb_id(self):

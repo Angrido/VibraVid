@@ -30,6 +30,7 @@ urlpatterns = [
     path("api/kill-and-clear-queue/", views.kill_and_clear_queue, name="kill_and_clear_queue"),
     path("api/stop-all-downloads/", views.stop_all_downloads, name="stop_all_downloads"),
     path("api/clear-history/", views.clear_download_history, name="clear_download_history"),
+    path("api/retry-download/", views.retry_download, name="retry_download"),
 
     # Watchlist
     path("watchlist/", views.cinema_watchlist, name="watchlist"),

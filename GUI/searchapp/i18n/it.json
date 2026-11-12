@@ -267,6 +267,8 @@
   "Uploaded providers": "Provider caricati",
   "Providers added from a ZIP can be removed here. The ones shipped with the app can't.": "I provider aggiunti da uno ZIP si possono rimuovere qui. Quelli inclusi nell'app no.",
   "Remove": "Rimuovi",
+  "Retry": "Riprova",
+  "Download not found or not retryable": "Download non trovato o non riprovabile",
   "None uploaded yet.": "Ancora nessuno caricato.",
   "Binaries": "Binari",
   "FFmpeg, Flux, dovi_tool, MKVToolNix and Velora don't go through the app update: they're checked against AstraeLabs/Binary and re-downloaded from here if outdated.": "FFmpeg, Flux, dovi_tool, MKVToolNix e Velora non passano dall'aggiornamento dell'app: vengono confrontati con AstraeLabs/Binary e riscaricati da qui se obsoleti.",

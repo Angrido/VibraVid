@@ -120,6 +120,7 @@
 	var URL_POSTERS   = "{% url 'resolve_tmdb_posters' %}";
 	var URL_REMOVE_QUEUE = "{% url 'remove_queued_download' %}";
 	var URL_CLEAR_QUEUE  = "{% url 'clear_queued_downloads' %}";
+	var URL_RETRY        = "{% url 'retry_download' %}";
 	var CSRF          = "{{ csrf_token }}";
 	var esc = CN.esc, titleize = CN.titleize, duotone = CN.duotone, pct = CN.pct;
 	var posterCache = {};
@@ -517,6 +518,23 @@
 		});
 	}
 
+	document.getElementById("cn-reel-hist").addEventListener("click", function (e) {
+		var btn = e.target.closest("[data-retry-download]");
+		if (!btn) return;
+		e.preventDefault();
+		e.stopPropagation();
+		btn.disabled = true;
+		queuePost(URL_RETRY, { download_id: btn.dataset.retryDownload })
+			.then(function () {
+				btn.textContent = t("Queued");
+				return refresh();
+			})
+			.catch(function (error) {
+				btn.disabled = false;
+				window.alert(t(error.message));
+			});
+	});
+
 	document.getElementById("cn-reel-queue").addEventListener("click", function (e) {
 		var btn = e.target.closest("[data-remove-queued]");
 		if (!btn) return;
@@ -702,7 +720,11 @@
 								posterMeta: d.site,
 								cap: d.title,
 								sub: sub,
-                                trackInfo: selectedTrackFacts(d)
+                                trackInfo: selectedTrackFacts(d),
+								action: d.retryable && d.id
+									? '<button class="cn-cta is-ghost" type="button" data-retry-download="' +
+										esc(d.id) + '" style="margin-top:8px;padding:7px 12px;font-size:12px">Retry</button>'
+									: ""
 							});
 						},
 						patch: function (node) {
