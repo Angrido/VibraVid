@@ -2,6 +2,7 @@
 
 """#789: an episode the provider does not have must stop before rescan/manual import."""
 
+import errno
 import os
 import sys
 import time
@@ -66,9 +67,17 @@ def _service(monkeypatch, tmp_path, download_result, writes_file):
     svc.manual_import_calls = []
     monkeypatch.setattr(svc, "_confirm_episode_import", lambda *a, **k: svc.manual_import_calls.append(1) or False)
 
+    monkeypatch.setenv("VIBRAVID_TEMP_DIR", str(tmp_path / "vibravid_tmp"))
+    svc.download_kwargs = {}
+
     def fake_download(**kwargs):
+        svc.download_kwargs = kwargs
+        output = Path(kwargs["output_path"])
         if writes_file:
-            (Path(kwargs["output_path"]) / "Serie1 S01E13.mkv").write_bytes(b"x")
+            resumable = output / ".Serie1 S01E13_temp"
+            resumable.mkdir(parents=True, exist_ok=True)
+            (resumable / "segment_0001.ts").write_bytes(b"s")
+            (output / "Serie1 S01E13.mkv").write_bytes(b"x")
         future = Future()
         future.set_result(download_result)
         return future
@@ -102,3 +111,62 @@ def test_successful_download_is_imported(monkeypatch, tmp_path):
 
     assert svc._process_serie_item(serie) is True
     assert sonarr.calls[:1] == ["rescan"] and svc.last_error is None
+
+
+def test_download_is_staged_outside_the_series_folder_and_only_the_final_file_is_moved(monkeypatch, tmp_path):
+    svc, sonarr, serie = _service(monkeypatch, tmp_path, download_result=True, writes_file=True)
+    season_folder = Path(serie["path"]) / "Season 1"
+
+    assert svc._process_serie_item(serie) is True
+
+    staging = Path(svc.download_kwargs["output_path"])
+    assert staging.is_relative_to(tmp_path / "vibravid_tmp")
+    assert not staging.is_relative_to(Path(serie["path"]))
+    assert sorted(p.name for p in season_folder.iterdir()) == ["Serie1 S01E13.mkv"]
+    assert not staging.exists()
+
+
+def test_failed_import_keeps_the_series_folder_clean_and_the_segments_resumable(monkeypatch, tmp_path):
+    svc, sonarr, serie = _service(monkeypatch, tmp_path, download_result=True, writes_file=True)
+    monkeypatch.setattr(sonarr, "series_exists", lambda _id: False)
+    season_folder = Path(serie["path"]) / "Season 1"
+
+    assert svc._process_serie_item(serie) is False
+
+    staging = Path(svc.download_kwargs["output_path"])
+    assert list(season_folder.iterdir()) == []
+    assert sorted(p.name for p in staging.iterdir()) == [".Serie1 S01E13_temp"]
+
+
+def test_staged_file_on_another_filesystem_is_copied_then_renamed(monkeypatch, tmp_path):
+    staging = tmp_path / "staging"
+    destination = tmp_path / "library" / "Season 1"
+    staging.mkdir()
+    (staging / "Serie1 S01E13.mkv").write_bytes(b"video")
+    (staging / "Serie1 S01E13.it.srt").write_bytes(b"sub")
+    real_replace = os.replace
+
+    def replace_across_devices(src, dst):
+        if Path(src).parent == staging:
+            raise OSError(errno.EXDEV, "Invalid cross-device link")
+        real_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", replace_across_devices)
+
+    published = ArrDownloaderService._publish_staged_files(staging, destination)
+
+    assert sorted(p.name for p in published) == ["Serie1 S01E13.it.srt", "Serie1 S01E13.mkv"]
+    assert sorted(p.name for p in destination.iterdir()) == ["Serie1 S01E13.it.srt", "Serie1 S01E13.mkv"]
+    assert (destination / "Serie1 S01E13.mkv").read_bytes() == b"video"
+    assert list(staging.iterdir()) == []
+
+
+def test_episodes_of_the_same_season_get_separate_staging_folders(tmp_path, monkeypatch):
+    monkeypatch.setenv("VIBRAVID_TEMP_DIR", str(tmp_path))
+    season_folder = str(tmp_path / "Serie1" / "Season 1")
+
+    first = ArrDownloaderService._staging_folder(season_folder, "S1E1")
+    second = ArrDownloaderService._staging_folder(season_folder, "S1E2")
+
+    assert first != second
+    assert first == ArrDownloaderService._staging_folder(season_folder, "S1E1")

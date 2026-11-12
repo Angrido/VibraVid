@@ -283,6 +283,14 @@ Without `path_mapping`, VibraVid reports `/media/Media/Film/my-movie` to Radarr.
 
 Each key is a prefix as seen by VibraVid; the value is the equivalent prefix inside the Radarr/Sonarr container. Entries are checked in order and the first matching prefix is replaced. Leave `path_mapping` as `{}` when both services share the same filesystem view.
 
+## Staging folder
+
+Downloads started by Sonarr/Radarr never write into the library. Segments, tracks and decrypt/merge leftovers go to a VibraVid staging folder; only the finished files (video, subtitles, sidecars) are moved into the series or movie folder, right before the rescan.
+
+- Location: `<temp root>/arr_staging/`, where the temp root is `VIBRAVID_TEMP_DIR` (the Docker image sets `/app/tmp`), else `DOWNLOAD.temp_root`, else VibraVid's `.cache` folder.
+- Same disk as the library: the files are renamed, which is instant. Different disk: each file is copied under a hidden `.partial` name and renamed when complete, so Sonarr/Radarr never see a half-written file.
+- After a failed or cancelled download the unfinished outputs are removed; the hidden segment folder stays in the staging folder so the next attempt can resume.
+
 ## Season mapping (Sonarr → provider)
 
 Sonarr and the provider sometimes number the same series differently (e.g. Sonarr `S17`, provider `S14`). VibraVid fixes this automatically, with no configuration, when a `TMDB_API_KEY` is set:
