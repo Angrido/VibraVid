@@ -120,6 +120,7 @@ GET_ONLY = [
     "/api/logs/list/",
     "/api/logs/content/",
     "/api/arr/status/",
+    "/api/arr/missing/states/",
     "/arr-stack/",
     "/api/version/check/",
 ]

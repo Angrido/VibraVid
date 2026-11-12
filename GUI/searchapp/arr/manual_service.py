@@ -62,20 +62,19 @@ def scan_missing() -> dict[str, Any]:
     series = sorted((i for i in items if i["content_type"] == "serie"), key=lambda i: i["title"].lower())
     movies = sorted((i for i in items if i["content_type"] == "movie"), key=lambda i: i["title"].lower())
 
-    keys = [_dedup_key(movie) for movie in movies]
-    for serie in series:
-        for season in serie["seasons"]:
-            keys.extend(_dedup_key(serie, season["number"], ep["episodeNumber"]) for ep in season["episodes"])
-    states = _queue_states(keys)
-
+    rows = list(movies)
     for movie in movies:
-        movie["state"] = states.get(_dedup_key(movie), "")
+        movie["queue_key"] = _dedup_key(movie)
     for serie in series:
         serie["episode_count"] = 0
         for season in serie["seasons"]:
             for episode in season["episodes"]:
-                episode["state"] = states.get(_dedup_key(serie, season["number"], episode["episodeNumber"]), "")
+                episode["queue_key"] = _dedup_key(serie, season["number"], episode["episodeNumber"])
+                rows.append(episode)
             serie["episode_count"] += len(season["episodes"])
+    states = _queue_states([row["queue_key"] for row in rows])
+    for row in rows:
+        row["state"] = states.get(row["queue_key"], "")
 
     return {
         "configured": bool(clients),

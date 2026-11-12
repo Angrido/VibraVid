@@ -241,3 +241,45 @@ def test_check_says_when_a_movie_exists_only_as_a_series(client, monkeypatch):
 
     assert result["found"] is False and result["series_only"] is True
     assert result["match"] == "Bleach: The Calamity (ITA)" and result["provider"] == "animeunity"
+
+
+def test_scan_gives_every_row_the_queue_key_the_page_polls(arr):
+    scan = manual_service.scan_missing()
+
+    assert [e["queue_key"] for e in scan["series"][0]["seasons"][0]["episodes"]] == ["sonarr_7_s1_e1", "sonarr_7_s1_e2"]
+    assert scan["movies"][0]["queue_key"] == "radarr_31"
+
+
+def test_states_endpoint_reports_a_failed_download_without_reloading(client):
+    _queue("radarr_31", ArrMediaRequest.Status.FAILED)
+    _queue("sonarr_7_s1_e2", ArrMediaRequest.Status.DOWNLOADING)
+
+    states = client.get("/api/arr/missing/states/", {"keys": "radarr_31,sonarr_7_s1_e2,sonarr_7_s1_e1"}).json()["states"]
+
+    assert states["radarr_31"]["state"] == "failed" and "Last try failed" in states["radarr_31"]["html"]
+    assert states["sonarr_7_s1_e2"]["state"] == "downloading" and "Downloading" in states["sonarr_7_s1_e2"]["html"]
+    assert states["sonarr_7_s1_e1"] == {"state": "", "html": ""}
+
+
+@pytest.mark.parametrize("status, label", [("skipped", "Not downloaded (skipped)"), ("import_pending", "Downloaded, not imported")])
+def test_states_endpoint_labels_every_closed_state(client, status, label):
+    _queue("radarr_31", status)
+
+    states = client.get("/api/arr/missing/states/", {"keys": "radarr_31"}).json()["states"]
+
+    assert label in states["radarr_31"]["html"]
+
+
+@pytest.mark.parametrize("keys", ["", "../etc", "radarr_x", ",".join(f"radarr_{n}" for n in range(1, 502))])
+def test_states_endpoint_rejects_missing_or_invalid_keys(client, keys):
+    assert client.get("/api/arr/missing/states/", {"keys": keys}).status_code == 400
+
+
+def test_missing_page_marks_each_state_slot_for_live_updates(client, arr):
+    _queue("radarr_31", ArrMediaRequest.Status.PENDING)
+
+    page = client.get("/arr-missing/").content.decode()
+
+    assert 'data-am-key="radarr_31" data-am-state="pending"' in page
+    assert 'data-am-key="sonarr_7_s1_e1" data-am-state=""' in page
+    assert 'data-states-url="/api/arr/missing/states/"' in page

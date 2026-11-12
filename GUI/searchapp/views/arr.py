@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 import threading
 import time
 
@@ -9,6 +10,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
+from django.template.loader import render_to_string
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
@@ -17,6 +19,9 @@ from ..models import ArrMediaRequest, ArrProcessingQueue
 from ._shared import _is_recent_webhook, _mark_native_webhook_seen
 
 logger = logging.getLogger(__name__)
+
+QUEUE_KEY = re.compile(r"radarr_\d+|sonarr_\d+_s\d+_e\d+")
+MAX_QUEUE_KEYS = 500
 
 
 def _manual_mode_response(source_tag: str) -> JsonResponse:
@@ -650,6 +655,26 @@ def arr_missing_download(request: HttpRequest) -> JsonResponse:
     return JsonResponse({"status": "ok", **result})
 
 
+@require_http_methods(["GET"])
+def arr_missing_states(request: HttpRequest) -> JsonResponse:
+    from ..arr.manual_service import _queue_states
+
+    keys = list(dict.fromkeys(key for key in request.GET.get("keys", "").split(",") if QUEUE_KEY.fullmatch(key)))
+    if not keys or len(keys) > MAX_QUEUE_KEYS:
+        return JsonResponse({"status": "error", "message": "Send between 1 and 500 valid queue keys."}, status=400)
+    states = _queue_states(keys)
+    return JsonResponse({
+        "status": "ok",
+        "states": {
+            key: {
+                "state": states.get(key, ""),
+                "html": render_to_string("searchapp/_arr_missing_state.html", {"state": states.get(key, "")}).strip(),
+            }
+            for key in keys
+        },
+    })
+
+
 @require_http_methods(["POST"])
 def arr_missing_check(request: HttpRequest) -> JsonResponse:
     from searchapp.api import get_api
@@ -746,5 +771,5 @@ def arr_movie_detail(request: HttpRequest, movie_id: int) -> HttpResponse:
 
 
 __all__ = ['arr_stack', 'seerr_webhook', 'sonarr_webhook', 'radarr_webhook', 'arr_status', 'arr_trigger_sync',
-           'arr_delete_request', 'arr_missing', 'arr_missing_download', 'arr_missing_check',
+           'arr_delete_request', 'arr_missing', 'arr_missing_download', 'arr_missing_states', 'arr_missing_check',
            'arr_library', 'arr_series_detail', 'arr_movie_detail']

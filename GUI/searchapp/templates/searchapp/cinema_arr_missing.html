@@ -93,7 +93,7 @@
 														<span class="am-code cn-mono">S{{ season.number|stringformat:"02d" }}E{{ episode.episodeNumber|stringformat:"02d" }}</span>
 														<span class="am-ep" data-no-tr>{{ episode.title|default:"" }}</span>
 													</label>
-													{% include "searchapp/_arr_missing_state.html" with state=episode.state %}
+													<span class="am-state-slot" data-am-key="{{ episode.queue_key }}" data-am-state="{{ episode.state }}">{% include "searchapp/_arr_missing_state.html" with state=episode.state %}</span>
 													<button class="cn-opt am-lang-btn" type="button" data-am-check-episode="{{ episode.id }}"
 													        aria-describedby="am-r-e{{ episode.id }}">Check languages</button>
 													<div class="am-result" id="am-r-e{{ episode.id }}" role="status" aria-live="polite"></div>
@@ -124,7 +124,7 @@
 									<span class="am-name" data-no-tr>{{ movie.title }}</span>
 									<span class="am-meta">{% if movie.year %}<span class="cn-num">{{ movie.year }}</span>{% endif %}{% if movie.provider %} · <span data-no-tr>{{ movie.provider }}</span>{% endif %}</span>
 								</label>
-								{% include "searchapp/_arr_missing_state.html" with state=movie.state %}
+								<span class="am-state-slot" data-am-key="{{ movie.queue_key }}" data-am-state="{{ movie.state }}">{% include "searchapp/_arr_missing_state.html" with state=movie.state %}</span>
 								<button class="cn-opt am-lang-btn" type="button" data-am-check-movie="{{ movie.id }}"
 								        aria-describedby="am-r-m{{ movie.id }}">Check languages</button>
 								<div class="am-result" id="am-r-m{{ movie.id }}" role="status" aria-live="polite"></div>
@@ -155,5 +155,6 @@
 <script src="{% static 'searchapp/arr_missing.js' %}?v={{ app_version }}"
         data-download-url="{% url 'arr_missing_download' %}"
         data-check-url="{% url 'arr_missing_check' %}"
+        data-states-url="{% url 'arr_missing_states' %}"
         data-csrf="{{ csrf_token }}"></script>
 {% endblock %}
