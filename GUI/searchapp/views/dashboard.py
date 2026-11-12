@@ -26,7 +26,7 @@ from ._shared import _run_download_in_thread, _tag_anime_entries
 
 logger = logging.getLogger(__name__)
 
-RETRYABLE_STATUSES = {"failed", "timed_out"}
+RETRYABLE_STATUSES = frozenset({"failed"})
 
 
 def get_downloads_json(request: HttpRequest) -> JsonResponse:
@@ -71,20 +71,11 @@ def retry_download(request: HttpRequest) -> JsonResponse:
     if not isinstance(body, dict):
         return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
 
-    download_id = str(body.get("download_id") or "")
-    entry = next(
-        (item for item in download_tracker.get_history()
-         if item.get("id") == download_id and item.get("retry") and item.get("status") in RETRYABLE_STATUSES),
-        None,
-    )
-    if entry is None:
+    retry = download_tracker.take_retry_request(str(body.get("download_id") or ""), RETRYABLE_STATUSES)
+    if retry is None:
         return JsonResponse({"status": "error", "message": "Download not found or not retryable"}, status=404)
 
-    retry = entry["retry"]
-    _run_download_in_thread(
-        retry["site"], retry["payload"], retry.get("season"), retry.get("episodes"), retry.get("media_type") or "Film",
-        quality=retry.get("quality"), audio_language=retry.get("audio_language"), audio_format=retry.get("audio_format"),
-    )
+    _run_download_in_thread(**retry)
     return JsonResponse({"status": "success"})
 
 

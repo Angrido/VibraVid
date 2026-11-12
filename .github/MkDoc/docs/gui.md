@@ -38,7 +38,7 @@ Open `http://<host>:8000`. For Docker/NAS use the [Docker](docker.md) and [NAS](
 | Clear all queued (active keep running) | `api/clear-queued-downloads/` |
 | Stop and clear the queue | `api/kill-and-clear-queue/` |
 | Clear history (completed/failed) | `api/clear-history/` |
-| Retry a failed or timed-out GUI download with the same site, item, season, episodes, quality and audio | `api/retry-download/` |
+| Retry a failed GUI download once, with the same request (site, item, season, episodes, folder, quality, audio) | `api/retry-download/` |
 
 ### Watchlist & auto-download
 

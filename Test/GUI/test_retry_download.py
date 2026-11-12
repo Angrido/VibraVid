@@ -81,7 +81,24 @@ def test_failed_gui_download_can_be_retried_with_the_same_request(monkeypatch):
     response = _retry(Client(), {"download_id": failed["id"]})
 
     assert response.status_code == 200
-    assert calls == [(("somesite", PAYLOAD, "2", "5", "Serie"), {"quality": "1080p", "audio_language": None, "audio_format": None})]
+    assert len(calls) == 1
+    args, kwargs = calls[0]
+    assert args == ()
+    assert kwargs["site"] == "somesite" and kwargs["item_payload"] == PAYLOAD
+    assert (kwargs["season"], kwargs["episodes"], kwargs["media_type"], kwargs["quality"]) == ("2", "5", "Serie", "1080p")
+
+
+def test_a_failed_download_is_retried_only_once(monkeypatch):
+    failed = _run_failing_gui_download(monkeypatch)
+    calls = []
+    monkeypatch.setattr(dashboard, "_run_download_in_thread", lambda *args, **kwargs: calls.append(kwargs))
+    client = Client()
+
+    assert _retry(client, {"download_id": failed["id"]}).status_code == 200
+    assert _retry(client, {"download_id": failed["id"]}).status_code == 404
+    assert len(calls) == 1
+    entry = client.get("/api/get-downloads/", HTTP_HOST="127.0.0.1").json()["history"][0]
+    assert entry["retryable"] is False
 
 
 def test_history_exposes_retryable_but_not_the_stored_request(monkeypatch):
@@ -100,6 +117,13 @@ def test_retry_refuses_unknown_or_not_failed_downloads(monkeypatch):
     monkeypatch.setattr(dashboard, "_run_download_in_thread", lambda *args, **kwargs: calls.append(args))
     client = Client()
 
+    context_tracker.retry_request = {"site": "somesite", "item_payload": PAYLOAD}
+    download_tracker.start_download("still_running", "Timed out", "somesite")
+    context_tracker.retry_request = None
+    download_tracker.downloads["still_running"]["status"] = "timed_out"
+    download_tracker.history.append(download_tracker.downloads.pop("still_running"))
+
+    assert _retry(client, {"download_id": "still_running"}).status_code == 404
     assert _retry(client, {"download_id": "missing"}).status_code == 404
     assert _retry(client, {"download_id": "cli_job"}).status_code == 404
     assert _retry(client, ["not", "an", "object"]).status_code == 400

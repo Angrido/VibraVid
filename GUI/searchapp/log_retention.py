@@ -7,6 +7,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings
+from django.db import DatabaseError
 
 from VibraVid.utils import config_manager
 
@@ -75,7 +76,11 @@ def purge_old_webhook_events(days: int | None = None) -> int:
     if days <= 0:
         return 0
     cutoff = timezone.now() - timedelta(days=days)
-    removed, _ = ArrWebhookEvent.objects.filter(received_at__lt=cutoff).delete()
+    try:
+        removed, _ = ArrWebhookEvent.objects.filter(received_at__lt=cutoff).delete()
+    except DatabaseError as exc:
+        logger.warning("ARR webhook events not purged: %s", exc)
+        return 0
     if removed:
         logger.info("Removed %d ARR webhook event(s) older than %d day(s)", removed, days)
     return removed

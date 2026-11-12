@@ -3,6 +3,7 @@
 import gzip
 import logging
 import os
+import zlib
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,7 @@ def decrypt_aes128_file(input_path: str | os.PathLike, output_path: str | os.Pat
     if data[:2] == b"\x1f\x8b":
         try:
             data = gzip.decompress(data)
-        except (OSError, EOFError):
+        except (OSError, EOFError, zlib.error):
             logger.debug("Ignored error in a best-effort step", exc_info=True)
 
     decrypted = decrypt_aes128(data, key_data, iv_hex, seg_num)

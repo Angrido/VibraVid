@@ -54,7 +54,7 @@ def probe_binary_version(dep_name: str, path: str | None) -> str:
         flags = _VERSION_FLAGS.get(dep_name, ["--version"])
         out = subprocess.run([path, *flags], capture_output=True, text=True, timeout=5)
         return extract_version(f"{out.stdout}\n{out.stderr}")
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, ValueError, subprocess.SubprocessError):
         return ""
 
 
