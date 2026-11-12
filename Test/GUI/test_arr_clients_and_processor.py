@@ -197,9 +197,35 @@ def test_wanted_missing_and_queue_send_each_servers_own_query_params(arr):
         {"pageSize": ["20"], "page": ["1"]},
     ]
     assert [c[2] for c in arr.calls if c[1].endswith("queue")] == [
-        {"includeUnknownSeriesItems": ["False"], "includeSeries": ["False"], "includeEpisode": ["False"]},
-        {"includeUnknownMovieItems": ["False"], "includeMovie": ["False"]},
+        {"includeUnknownSeriesItems": ["False"], "includeSeries": ["False"], "includeEpisode": ["False"], "pageSize": ["1000"]},
+        {"includeUnknownMovieItems": ["False"], "includeMovie": ["False"], "pageSize": ["1000"]},
     ]
+
+
+def test_queue_check_sees_items_beyond_the_default_page_of_ten(arr):
+    arr.routes["/api/v3/queue"] = lambda query: {
+        "records": [{"episodeId": n, "movieId": n} for n in range(1, int(query.get("pageSize", ["10"])[0]) + 1)]
+    }
+    sonarr = sonarr_client.SonarrClient(arr.url, API_KEY, timeout=5, max_retries=1)
+    radarr = radarr_client.RadarrClient(arr.url, API_KEY, timeout=5, max_retries=1)
+
+    assert sonarr.is_episode_in_queue(11) is True
+    assert radarr.is_movie_in_queue(11) is True
+
+
+def test_connection_problem_tells_a_rejected_key_from_a_server_that_does_not_answer(arr):
+    arr.routes["/api/v3/system/status"] = {"version": "4.0"}
+
+    assert sonarr_client.SonarrClient(arr.url, API_KEY, timeout=5, max_retries=1).connection_problem() == ""
+    assert sonarr_client.SonarrClient(arr.url, "bad-key", timeout=5, max_retries=1).connection_problem() == "unauthorized"
+    assert radarr_client.RadarrClient("http://127.0.0.1:1/", API_KEY, timeout=1, max_retries=1).connection_problem() == "unreachable"
+
+
+def test_an_answer_that_is_not_json_counts_as_unreachable_instead_of_breaking_the_scan(monkeypatch):
+    client = sonarr_client.SonarrClient("http://sonarr.invalid/", API_KEY)
+    monkeypatch.setattr(client, "system_status", lambda: json.loads("<html>login</html>"))
+
+    assert client.connection_problem() == "unreachable"
 
 
 # --- ArrProcessorService ------------------------------------------------------------------------------------------------------

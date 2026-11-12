@@ -7,6 +7,13 @@ from typing import Any
 
 import requests
 
+QUEUE_PAGE_SIZE = 1000
+
+
+def connection_problem(exc: Exception) -> str:
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    return "unauthorized" if status in (401, 403) else "unreachable"
+
 
 class ArrClient:
     label = "Arr"
@@ -73,13 +80,16 @@ class ArrClient:
         """Check connectivity and API key validity."""
         return self._get("/system/status").json()
 
-    def is_available(self) -> bool:
-        """Return True if the server is reachable."""
+    def connection_problem(self) -> str:
         try:
             self.system_status()
-            return True
-        except Exception:
-            return False
+        except Exception as exc:
+            return connection_problem(exc)
+        return ""
+
+    def is_available(self) -> bool:
+        """Return True if the server is reachable."""
+        return not self.connection_problem()
 
     # ── config ───────────────────────────────────────────
     def get_naming_config(self) -> dict[str, Any]:
@@ -104,7 +114,7 @@ class ArrClient:
 
     # ── queue ────────────────────────────────────────────
     def queue(self) -> dict[str, Any]:
-        return self._get("/queue", params=self.queue_params).json()
+        return self._get("/queue", params={**self.queue_params, "pageSize": QUEUE_PAGE_SIZE}).json()
 
     # ── tags ─────────────────────────────────────────────
     def get_tags(self) -> list[dict[str, Any]]:
