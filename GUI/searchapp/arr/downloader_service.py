@@ -2,11 +2,14 @@
 
 import concurrent.futures
 import datetime
+import errno
+import hashlib
 import json
 import logging
 import os
 import pathlib
 import re
+import shutil
 import time
 from typing import Any
 
@@ -205,7 +208,8 @@ class ArrDownloaderService:
                 if download_folder != target_folder:
                     logger.info(f"[S{season_num}E{ep_num}] Download folder (VibraVid path): '{download_folder}'")
 
-                # Download directly to VibraVid's equivalent path
+                staging = self._staging_folder(download_folder, f"S{season_num}E{ep_num}")
+                logger.info(f"[S{season_num}E{ep_num}] Staging folder: '{staging}'")
                 download_started = time.time()
                 future = _run_download_in_thread(
                     site=provider,
@@ -213,10 +217,11 @@ class ArrDownloaderService:
                     season=self._provider_season_selector(provider, item_payload, provider_season),
                     episodes=str(download_episode),
                     media_type="Serie",
-                    output_path=download_folder,
+                    output_path=str(staging),
                     strict_audio=True,
                 )
                 any_success = True
+                published = False
 
                 try:
                     download_ok = future.result(timeout=self.download_timeout)  # wait for download to actually finish
@@ -229,7 +234,7 @@ class ArrDownloaderService:
                         probe_name = item_payload.get("name", matched_title)
                         probe_year = item_payload.get("year", year)
                         probe_root = serie.get("path", "") or self._fallback_series_root(title)
-                        probe_folders = [download_folder]
+                        probe_folders = [str(staging)]
                         probe_fallback = self._get_vibrativo_serie_output(probe_root, probe_name, season_num, probe_year)
                         if probe_fallback:
                             probe_folders.append(self._translate_path(probe_fallback, reverse=True))
@@ -246,7 +251,7 @@ class ArrDownloaderService:
                     if mapped:
                         renumbered = bool(
                             self._renumber_downloaded_files(
-                                download_folder,
+                                str(staging),
                                 download_started,
                                 (provider_season, download_episode),
                                 (season_num, ep_num),
@@ -266,6 +271,9 @@ class ArrDownloaderService:
                         self.last_error = "series_removed"
                         any_success = False
                         continue
+
+                    self._publish_staged_files(staging, pathlib.Path(download_folder))
+                    published = True
 
                     # A plain rescan is enough whenever the file name parses (i.e. carries SxxExx).
                     # A mapped file that could not be renumbered must not be rescanned: Sonarr would
@@ -317,6 +325,8 @@ class ArrDownloaderService:
                     self.last_error = str(exc)
                     # Don't unmonitor on failure -> stays in Sonarr's wanted list for retry
                     any_success = False
+                finally:
+                    self._clear_staging(staging, keep_resumable=not published)
 
         return any_success
 
@@ -382,6 +392,8 @@ class ArrDownloaderService:
         if download_folder != target_folder:
             logger.info(f"[_process_movie] Download folder (VibraVid path): '{download_folder}'")
 
+        staging = self._staging_folder(download_folder)
+        logger.info(f"[_process_movie] Staging folder: '{staging}'")
         movie_download_started = time.time()
         future = _run_download_in_thread(
             site=provider,
@@ -389,9 +401,10 @@ class ArrDownloaderService:
             season=None,
             episodes=None,
             media_type="Film",
-            output_path=download_folder,
+            output_path=str(staging),
             strict_audio=True,
         )
+        published = False
 
         try:
             download_ok = future.result(timeout=self.download_timeout)  # wait for download to actually finish
@@ -402,7 +415,7 @@ class ArrDownloaderService:
             fallback_folder = self._get_vibrativo_movie_output(target_folder, result_name, result_year)
 
             if download_ok is False:
-                probe_folders = [download_folder]
+                probe_folders = [str(staging)]
                 if fallback_folder:
                     probe_folders.append(self._translate_path(fallback_folder, reverse=True))
                 if not self._wrote_files_since(probe_folders, movie_download_started):
@@ -416,6 +429,9 @@ class ArrDownloaderService:
                 logger.error(f"Movie '{title}' (id {movie_id}) no longer exists in Radarr, skipping import")
                 self.last_error = "movie_removed"
                 return False
+
+            self._publish_staged_files(staging, pathlib.Path(download_folder))
+            published = True
 
             # A plain rescan is enough whenever the file name parses (i.e. carries a year).
             try:
@@ -457,6 +473,8 @@ class ArrDownloaderService:
             self.last_error = str(exc)
             # Don't unmonitor on failure -> stays in Radarr's wanted list for retry
             return False
+        finally:
+            self._clear_staging(staging, keep_resumable=not published)
 
     # ── helpers ──────────────────────────────────────────
     def _is_radarr_movie_still_monitored(self, movie_id: int | None) -> bool:
@@ -774,6 +792,56 @@ class ArrDownloaderService:
         if not renamed:
             logger.warning(f"[auto_map] No downloaded file in '{folder}' carried S{provider_season}E{provider_ep}")
         return renamed
+
+    @staticmethod
+    def _staging_folder(destination: str, item: str = "") -> pathlib.Path:
+        from VibraVid.core.downloader.base import configured_temp_root
+
+        root = configured_temp_root() or os.path.join(config_manager.base_path, ".cache")
+        key = hashlib.sha1(f"{os.path.abspath(destination)}|{item}".encode()).hexdigest()[:12]
+        staging = pathlib.Path(root) / "arr_staging" / key
+        staging.mkdir(parents=True, exist_ok=True)
+        return staging
+
+    @staticmethod
+    def _publish_staged_files(staging: pathlib.Path, destination: pathlib.Path) -> list[pathlib.Path]:
+        published = []
+        for source in sorted(staging.rglob("*")):
+            relative = source.relative_to(staging)
+            if not source.is_file() or any(part.startswith(".") for part in relative.parts):
+                continue
+            target = destination / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                os.replace(source, target)
+            except OSError as exc:
+                if exc.errno != errno.EXDEV:
+                    raise
+                partial = target.with_name(f".{target.name}.partial")
+                try:
+                    shutil.copy2(source, partial)
+                    os.replace(partial, target)
+                finally:
+                    partial.unlink(missing_ok=True)
+                source.unlink()
+            logger.info(f"Moved '{relative}' from staging to '{destination}'")
+            published.append(target)
+        return published
+
+    @staticmethod
+    def _clear_staging(staging: pathlib.Path, keep_resumable: bool) -> None:
+        if not keep_resumable:
+            shutil.rmtree(staging, ignore_errors=True)
+            return
+        if not staging.is_dir():
+            return
+        for entry in staging.iterdir():
+            if entry.name.startswith("."):
+                continue
+            if entry.is_dir():
+                shutil.rmtree(entry, ignore_errors=True)
+            else:
+                entry.unlink(missing_ok=True)
 
     @staticmethod
     def _wrote_files_since(folders: list[str], since: float) -> bool:

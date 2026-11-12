@@ -53,6 +53,10 @@ DELAY_SS = config_manager.config.get_int("DOWNLOAD", "delay_after_download")
 MUX_ENGINE = config_manager.config.get("PROCESS", "engine", default="ffmpeg")
 
 
+def configured_temp_root() -> str:
+    return str(os.environ.get("VIBRAVID_TEMP_DIR") or config_manager.config.get("DOWNLOAD", "temp_root", default="") or "").strip()
+
+
 class DownloadCancelled(RuntimeError):
     """User-initiated abort (Ctrl+C): unwinds straight to the CLI for a clean exit with no traceback."""
 
@@ -132,7 +136,7 @@ class BaseDownloader:
     @staticmethod
     def _local_temp_dir(directory: str, name: str) -> str | None:
         """``<temp_root>/<hash of the output folder>/<name>`` when VIBRAVID_TEMP_DIR or DOWNLOAD.temp_root names a writable folder, else None (the temp folder stays next to the output). The hash keeps the path stable for resuming and apart for two titles with the same name."""
-        root = str(os.environ.get("VIBRAVID_TEMP_DIR") or config_manager.config.get("DOWNLOAD", "temp_root", default="") or "").strip()
+        root = configured_temp_root()
         if not root:
             return None
 
