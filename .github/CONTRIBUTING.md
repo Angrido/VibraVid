@@ -47,6 +47,22 @@ the full walkthrough.
 - Write the PR description around the *why*: what problem this solves or
   what behavior changes, not just a restatement of the diff.
 
+## Versioning
+
+Every push to `main` bumps the version in `VibraVid/utils/upload/version.py`
+and `pyproject.toml` from the commits since the last `[RELEASE] Version x.y.z`
+commit, then starts the release builds. Write commit subjects as
+`[Area] Verb ...` so the bump is right:
+
+- `BREAKING` anywhere in the message → major (`1.5.0` → `2.0.0`)
+- subject starting with `Add`, `Introduce`, `Implement`, `Support`, `Allow`,
+  `Enable` or `New` → minor (`1.5.0` → `1.6.0`)
+- anything else → patch (`1.5.0` → `1.5.1`)
+- only `[Docs]`, `[Test]` or `[CI]` commits → no release
+
+To force a level, run the *Bump Version* workflow by hand and pick
+`patch`, `minor` or `major`.
+
 ## Reporting bugs
 
 Open a GitHub issue with: what you ran (command/steps), what you expected,
