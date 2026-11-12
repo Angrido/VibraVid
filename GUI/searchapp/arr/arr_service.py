@@ -582,7 +582,9 @@ def download_movie(downloader, item: dict) -> None:
         if downloader._process_movie(item):
             _mark_completed(item)
         else:
-            _mark_failed(item, downloader.last_error or "download_failed")
+            reason = downloader.last_error or "download_failed"
+            logger.warning(f"'{item.get('title')}' not downloaded: {reason}")
+            _mark_failed(item, reason)
     except Exception as exc:
         logger.error(f"Download failed for movie '{item.get('title')}': {exc}")
         _mark_failed(item, str(exc))
@@ -596,7 +598,9 @@ def download_episode(downloader, item: dict, season: dict, episode: dict) -> Non
         if downloader._process_serie(ep_item):
             _mark_completed(item, season_num, ep_num)
         else:
-            _mark_failed(item, downloader.last_error or "download_failed", season_num, ep_num)
+            reason = downloader.last_error or "download_failed"
+            logger.warning(f"'{item.get('title')}' S{season_num}E{ep_num} not downloaded: {reason}")
+            _mark_failed(item, reason, season_num, ep_num)
     except Exception as exc:
         logger.error(f"Download failed for '{item.get('title')}' S{season_num}E{ep_num}: {exc}")
         _mark_failed(item, str(exc), season_num, ep_num)
