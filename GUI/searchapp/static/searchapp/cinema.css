@@ -135,9 +135,9 @@
 }
 .cn-wordmark i { font-style: italic; color: var(--cn-hot); transition: transform var(--cn-t) var(--cn-ease-spring); display: inline-block; }
 .cn-wordmark::before {
-  content: ""; align-self: center; width: 10px; height: 10px; margin-right: 9px; border-radius: 50%;
-  background: var(--cn-hot);
-  box-shadow: 0 0 0 3px rgba(var(--cn-hot-a), .18), 0 0 18px rgba(var(--cn-hot-a), .7);
+  content: ""; align-self: center; width: 28px; height: 28px; margin-right: 10px; border-radius: 7px;
+  background: url("img/logo.svg") center / contain no-repeat;
+  box-shadow: 0 0 18px rgba(var(--cn-hot-a), .28);
 }
 .cn-wordmark:hover i { transform: translateY(-2px) rotate(-4deg); }
 .cn-vtag {

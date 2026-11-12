@@ -9,7 +9,8 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="theme-color" content="#0D0C0A" />
-		<title>ARROWAR - Login</title>
+		<title>VibraVid - Login</title>
+		<link rel="icon" type="image/svg+xml" href="{% static 'searchapp/img/logo.svg' %}" />
 		<link rel="icon" type="image/png" href="{% static 'searchapp/img/favicon.png' %}" />
 		<link rel="stylesheet" href="{% static 'searchapp/cinema.css' %}" />
 		<style>
@@ -27,7 +28,7 @@
 		<div class="cn-login-lang">{% include "searchapp/_lang_select.html" %}</div>
 		<div class="cn-login-glow" aria-hidden="true"></div>
 		<main class="cn-login">
-			<span class="cn-wordmark" aria-hidden="true">ARRO<i>WAR</i></span>
+			<span class="cn-wordmark" aria-hidden="true">Vibra<i>Vid</i></span>
 			<div class="cn-page-hd"><h1>Sign in</h1></div>
 			<form class="cn-box" method="post" action="{% url 'login' %}">
 				{% csrf_token %}
