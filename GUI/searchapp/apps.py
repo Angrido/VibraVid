@@ -39,9 +39,10 @@ class SearchappConfig(AppConfig):
 
         # Remove log files older than DEFAULT.log_retention_days
         try:
-            from .log_retention import purge_old_logs
+            from .log_retention import purge_old_logs, purge_old_webhook_events
 
             purge_old_logs()
+            purge_old_webhook_events()
         except Exception as exc:
             logger.exception("[Logs] Retention cleanup failed: %s", exc)
 
