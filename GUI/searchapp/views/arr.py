@@ -591,4 +591,98 @@ def arr_delete_request(request: HttpRequest, queue_id: int) -> JsonResponse:
         return JsonResponse({"status": "error", "message": "Could not delete ARR request"}, status=500)
 
 
-__all__ = ['arr_stack', 'seerr_webhook', 'sonarr_webhook', 'radarr_webhook', 'arr_status', 'arr_trigger_sync', 'arr_delete_request']
+def _json_body(request: HttpRequest) -> dict:
+    try:
+        body = json.loads(request.body.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return {}
+    return body if isinstance(body, dict) else {}
+
+
+def _int_ids(values) -> set[int]:
+    if not isinstance(values, list):
+        return set()
+    return {value for value in values if isinstance(value, int) and not isinstance(value, bool) and value > 0}
+
+
+@require_http_methods(["GET"])
+def arr_missing(request: HttpRequest) -> HttpResponse:
+    from ..arr.manual_service import scan_missing
+
+    try:
+        scan = scan_missing()
+        scan_failed = False
+    except Exception:
+        logger.exception("Missing library scan failed")
+        scan, scan_failed = {"configured": True, "unreachable": [], "series": [], "movies": [], "episode_total": 0}, True
+    return render(request, "searchapp/cinema_arr_missing.html", {"nav_active": "sistema", "scan_failed": scan_failed, **scan})
+
+
+@require_http_methods(["POST"])
+def arr_missing_download(request: HttpRequest) -> JsonResponse:
+    from ..arr.manual_service import ArrNotConfigured, start_selected_downloads
+
+    body = _json_body(request)
+    movie_ids, episode_ids = _int_ids(body.get("movies")), _int_ids(body.get("episodes"))
+    if not movie_ids and not episode_ids:
+        return JsonResponse({"status": "error", "message": "Select at least one episode or movie."}, status=400)
+    try:
+        result = start_selected_downloads(movie_ids, episode_ids)
+    except ArrNotConfigured:
+        return JsonResponse({"status": "error", "message": "Sonarr and Radarr are not configured."}, status=400)
+    except Exception:
+        logger.exception("Manual ARR download failed to start")
+        return JsonResponse({"status": "error", "message": "Could not reach Sonarr or Radarr. Retry in a moment."}, status=502)
+    return JsonResponse({"status": "ok", **result})
+
+
+@require_http_methods(["POST"])
+def arr_missing_check(request: HttpRequest) -> JsonResponse:
+    from searchapp.api import get_api
+    from searchapp.api.base import Entries
+
+    from VibraVid.core.utils.audio_selection import configured_audio_languages, matches_audio_language
+
+    from ..arr.manual_service import ArrNotConfigured, find_on_provider
+    from .download import track_report
+
+    body = _json_body(request)
+    movie_id = next(iter(_int_ids([body.get("movie")])), None)
+    episode_id = next(iter(_int_ids([body.get("episode")])), None)
+    if (movie_id is None) == (episode_id is None):
+        return JsonResponse({"status": "error", "message": "Choose one episode or one movie to check."}, status=400)
+
+    try:
+        match = find_on_provider(movie_id=movie_id, episode_id=episode_id)
+        payload = match["payload"]
+        if not payload:
+            return JsonResponse({"status": "ok", "found": False, "provider": match["provider"],
+                                 "message": "Not found on any configured provider."})
+        item = Entries(**{k: v for k, v in payload.items() if k in Entries.__dataclass_fields__})
+        try:
+            report = track_report(get_api(match["provider"]), item, match["season"], match["episode"], item.name)
+        except NotImplementedError:
+            report = {"qualities": [], "audio_languages": [], "audio_supported": False}
+    except ArrNotConfigured:
+        return JsonResponse({"status": "error", "message": "Sonarr and Radarr are not configured."}, status=400)
+    except Exception:
+        logger.exception("Language check failed")
+        return JsonResponse({"status": "error", "message": "Unable to check languages right now. Retry in a moment."}, status=502)
+
+    wanted = configured_audio_languages()
+    for language in report["audio_languages"]:
+        language["wanted"] = any(matches_audio_language([language["code"]], w["code"]) for w in wanted)
+    return JsonResponse({
+        "status": "ok",
+        "found": True,
+        "provider": match["provider"],
+        "match": item.name,
+        "qualities": report["qualities"],
+        "audio_supported": report["audio_supported"],
+        "audio_languages": report["audio_languages"],
+        "wanted": wanted,
+    })
+
+
+__all__ = ['arr_stack', 'seerr_webhook', 'sonarr_webhook', 'radarr_webhook', 'arr_status', 'arr_trigger_sync',
+           'arr_delete_request', 'arr_missing', 'arr_missing_download', 'arr_missing_check']

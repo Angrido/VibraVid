@@ -65,6 +65,25 @@ class ArrDownloaderService:
             logger.error(f"Unknown content_type: {content_type}")
             return False
 
+    def locate(self, item: dict, season_num: int | None = None, ep_num: int | None = None) -> tuple[dict[str, Any] | None, str]:
+        media_type = "movie" if item.get("content_type") == "movie" else "tv"
+        tmdb_id = self._resolve_request_tmdb_id(item, media_type)
+        resolve_titles = self._resolve_radarr_title if media_type == "movie" else self._resolve_sonarr_title
+        titles = resolve_titles(item["title"], item.get("id"), tmdb_id) or [item["title"]]
+        payload, provider, _ = self._search_with_fallback_titles(
+            titles,
+            (item.get("provider") or "").strip(),
+            year_range=self._build_year_range(item.get("year"), media_type=media_type),
+            expected_year=item.get("year"),
+            tmdb_id=tmdb_id,
+            media_type=media_type,
+            season_number=season_num,
+            episode_number=ep_num,
+            imdb_id=item.get("imdbId"),
+            tvdb_id=item.get("tvdbId"),
+        )
+        return payload, provider
+
     # ── serie ────────────────────────────────────────────
     def _process_serie(self, serie: dict) -> bool:
         """Process one series item; its log lines go to the title's own file."""

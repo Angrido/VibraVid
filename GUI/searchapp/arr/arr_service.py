@@ -569,6 +569,32 @@ def _targeted_sync_with_retry(
     return trigger_polling_sync(full_resync=True)
 
 
+def download_movie(downloader, item: dict) -> None:
+    try:
+        _mark_downloading(item)
+        if downloader._process_movie(item):
+            _mark_completed(item)
+        else:
+            _mark_failed(item, downloader.last_error or "download_failed")
+    except Exception as exc:
+        logger.error(f"Download failed for movie '{item.get('title')}': {exc}")
+        _mark_failed(item, str(exc))
+
+
+def download_episode(downloader, item: dict, season: dict, episode: dict) -> None:
+    season_num, ep_num = season["number"], episode["episodeNumber"]
+    ep_item = {**item, "seasons": [{"number": season_num, "episodes": [episode]}]}
+    try:
+        _mark_downloading(item, season_num, ep_num)
+        if downloader._process_serie(ep_item):
+            _mark_completed(item, season_num, ep_num)
+        else:
+            _mark_failed(item, downloader.last_error or "download_failed", season_num, ep_num)
+    except Exception as exc:
+        logger.error(f"Download failed for '{item.get('title')}' S{season_num}E{ep_num}: {exc}")
+        _mark_failed(item, str(exc), season_num, ep_num)
+
+
 def trigger_polling_sync(full_resync: bool = False, manual: bool = False) -> int:
     """
     Run a polling sync against Sonarr/Radarr.
@@ -627,20 +653,11 @@ def trigger_polling_sync(full_resync: bool = False, manual: bool = False) -> int
                 continue
             if _enqueue_if_new(item, "polling"):
                 enqueued += 1
-                try:
-                    _mark_downloading(item)
-                    if downloader._process_movie(item):
-                        _mark_completed(item)
-                    else:
-                        _mark_failed(item, downloader.last_error or "download_failed")
-                except Exception as exc:
-                    logger.error(f"Download failed for movie '{item.get('title')}': {exc}")
-                    _mark_failed(item, str(exc))
+                download_movie(downloader, item)
 
         elif content_type == "serie":
             for season in item.get("seasons", []):
                 for episode in season.get("episodes", []):
-                    ep_item = {**item, "seasons": [{"number": season["number"], "episodes": [episode]}]}
                     if _skip_unmonitored_episode(sonarr, item, season, episode, "[polling]"):
                         continue
                     if _enqueue_if_new(
@@ -651,20 +668,7 @@ def trigger_polling_sync(full_resync: bool = False, manual: bool = False) -> int
                         episode_id=episode["id"],
                     ):
                         enqueued += 1
-                        try:
-                            _mark_downloading(item, season["number"], episode["episodeNumber"])
-                            if downloader._process_serie(ep_item):
-                                _mark_completed(item, season["number"], episode["episodeNumber"])
-                            else:
-                                _mark_failed(
-                                    item,
-                                    downloader.last_error or "download_failed",
-                                    season["number"],
-                                    episode["episodeNumber"],
-                                )
-                        except Exception as exc:
-                            logger.error(f"Download failed for '{item.get('title')}' S{season['number']}E{episode['episodeNumber']}: {exc}")
-                            _mark_failed(item, str(exc), season["number"], episode["episodeNumber"])
+                        download_episode(downloader, item, season, episode)
 
     logger.info(f"Polling sync complete: {enqueued} new items enqueued")
     return enqueued
