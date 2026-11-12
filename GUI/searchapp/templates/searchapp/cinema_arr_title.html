@@ -1,0 +1,172 @@
+{% extends "searchapp/cinema_base.html" %}
+{% load static %}
+
+{% block title %}{% if item %}{{ item.title }}{% else %}Library{% endif %} — VibraVid{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{% static 'searchapp/arr_missing.css' %}?v={{ app_version }}" />
+<link rel="stylesheet" href="{% static 'searchapp/arr_library.css' %}?v={{ app_version }}" />
+{% endblock %}
+
+{% block top_float %}{% if item %} is-float{% endif %}{% endblock %}
+
+{% block content %}
+{% if not configured %}
+	<div class="cn-pad am-page" style="padding-top:34px">
+		<div class="am-state">
+			<h2>Sonarr and Radarr are not connected</h2>
+			<p>Add their URL and API key in the ARR section of the settings, then come back here.</p>
+			<a class="cn-cta" href="{% url 'settings_editor' %}">Open settings</a>
+		</div>
+	</div>
+{% elif failed %}
+	<div class="cn-pad am-page" style="padding-top:34px">
+		<div class="am-state is-bad" role="alert">
+			<h2>This title could not be loaded</h2>
+			<p>Sonarr or Radarr did not answer. Check that it is running, then try again. Details are in the logs.</p>
+			<span class="cn-acts">
+				<a class="cn-cta" href="{{ request.path }}">Try again</a>
+				<a class="cn-cta is-ghost" href="{% url 'arr_library' %}">Back to library</a>
+			</span>
+		</div>
+	</div>
+{% else %}
+	<section class="cn-hero lib-hero">
+		<div class="cn-hero-art"></div>
+		{% if item.fanart %}<div class="cn-hero-photo"><img src="{{ item.fanart }}" alt="" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()"></div>{% endif %}
+		<div class="cn-hero-veil"></div>
+
+		<div class="cn-hero-in lib-hero-in">
+			<span class="cn-poster lib-hero-poster" aria-hidden="true">
+				{% if item.poster %}<img src="{{ item.poster }}" alt="" decoding="async" referrerpolicy="no-referrer" width="200" height="300" onerror="this.remove()">{% endif %}
+				<span class="cn-poster-fill"><span class="cn-ptitle">{{ item.title|first|upper }}</span></span>
+			</span>
+
+			<div class="lib-hero-txt">
+				<nav class="lib-crumb" aria-label="Breadcrumb"><a href="{% url 'arr_library' %}">Library</a></nav>
+				<div class="cn-kicker">
+					<span class="cn-st is-type">{% if item.kind == "movie" %}Movie{% else %}Series{% endif %}</span>
+					{% include "searchapp/_arr_library_state.html" with state=item.state kind=item.kind missing=item.missing %}
+					<span class="cn-tag lib-kick">
+						{% if item.year %}<span class="cn-num">{{ item.year }}</span>{% endif %}
+						{% if item.network %} · <span data-no-tr>{{ item.network }}</span>{% endif %}
+						{% if item.studio %} · <span data-no-tr>{{ item.studio }}</span>{% endif %}
+						{% if item.status == "continuing" %} · <span>Continuing</span>{% elif item.status == "ended" %} · <span>Ended</span>{% endif %}
+					</span>
+				</div>
+
+				<h1 class="cn-blast lib-title" data-no-tr>{{ item.title }}</h1>
+
+				{% if item.overview %}<p class="cn-hero-line lib-overview" data-no-tr>{{ item.overview }}</p>{% endif %}
+
+				{% if item.kind == "serie" and item.aired %}
+					<div class="cn-hero-prog">
+						<div class="cn-hero-fig">
+							<span class="cn-pct">{{ item.percent }}<span>%</span></span>
+							<span class="cn-of">{{ item.have }} of {{ item.aired }} aired episodes</span>
+						</div>
+						<div class="cn-bar" role="progressbar" aria-label="Episodes in library" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ item.percent }}"><i style="width:{{ item.percent }}%"></i></div>
+					</div>
+				{% endif %}
+
+				<div class="cn-facts">
+					{% if item.kind == "serie" %}<span><b class="cn-num">{{ item.season_count }}</b> <span>seasons</span></span>{% endif %}
+					{% if item.runtime %}<span><b class="cn-num">{{ item.runtime }}</b> <span>min</span></span>{% endif %}
+					{% if item.size %}<span><b>{{ item.size|filesizeformat }}</b> <span>on disk</span></span>{% endif %}
+					{% if item.genres %}<span data-no-tr>{{ item.genres|slice:":3"|join:" · " }}</span>{% endif %}
+				</div>
+
+				<div class="cn-acts">
+					{% if selectable %}
+						<button class="cn-cta" type="button" id="am-select-all">{% if item.kind == "movie" %}Select for download{% else %}Select all missing episodes{% endif %}</button>
+					{% endif %}
+					<a class="cn-cta is-ghost" href="{% url 'arr_library' %}">Back to library</a>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<div class="cn-pad am-page lib-detail">
+		{% if item.kind == "movie" %}
+			{% if item.state == "missing" or item.queue %}
+				<section class="am-group" aria-labelledby="lib-get-h">
+					<div class="cn-strip-hd am-group-hd"><h2 id="lib-get-h">Download</h2></div>
+					<ul class="am-rows am-movies">
+						<li class="am-row am-card" data-am-item>
+							<label class="am-pick">
+								<input class="am-check" type="checkbox" data-am-movie="{{ item.id }}" {% if not selectable %}disabled{% endif %}>
+								<span class="am-name" data-no-tr>{{ item.title }}</span>
+								{% if item.year %}<span class="am-meta cn-num">{{ item.year }}</span>{% endif %}
+							</label>
+							{% if item.queue %}{% include "searchapp/_arr_missing_state.html" with state=item.queue %}{% else %}{% include "searchapp/_arr_library_state.html" with state=item.state kind="movie" cls="am-state-tag" %}{% endif %}
+							<button class="cn-opt am-lang-btn" type="button" data-am-check-movie="{{ item.id }}" aria-describedby="am-r-m{{ item.id }}">Check languages</button>
+							<div class="am-result" id="am-r-m{{ item.id }}" role="status" aria-live="polite"></div>
+						</li>
+					</ul>
+				</section>
+			{% endif %}
+		{% else %}
+			<section class="am-group" aria-labelledby="lib-seasons-h">
+				<div class="cn-strip-hd am-group-hd">
+					<h2 id="lib-seasons-h">Seasons</h2>
+					<span class="cn-n">{{ seasons|length }} seasons · {{ item.missing }} missing episodes</span>
+				</div>
+				{% for season in seasons %}
+					<article class="am-card lib-season" data-am-item style="--am-i:{{ forloop.counter0 }}">
+						<div class="am-card-hd">
+							<input class="am-check" type="checkbox" data-am-scope
+							       aria-label="{% if season.number %}Select the missing episodes of season {{ season.number }}{% else %}Select the missing specials{% endif %}">
+							<button class="am-toggle" type="button" aria-expanded="{% if season.open %}true{% else %}false{% endif %}" aria-controls="lib-s{{ season.number }}">
+								<span class="am-name">{% if season.number %}Season {{ season.number }}{% else %}Specials{% endif %}</span>
+								<span class="am-meta"><span class="cn-num">{{ season.have }}/{{ season.total }}</span> <span>episodes</span>{% if season.missing %} · <span class="cn-num">{{ season.missing }}</span> <span>missing</span>{% endif %}</span>
+								<span class="cn-bar lib-sbar{% if season.percent == 100 %} is-full{% endif %}" aria-hidden="true"><i style="width:{{ season.percent }}%"></i></span>
+								<svg class="am-chev" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+							</button>
+						</div>
+						<div class="am-card-body" id="lib-s{{ season.number }}" {% if not season.open %}hidden{% endif %}>
+							<ul class="am-rows">
+								{% for episode in season.episodes %}
+									<li class="am-row lib-ep is-{{ episode.state }}">
+										<label class="am-pick">
+											{% if episode.selectable %}
+												<input class="am-check" type="checkbox" data-am-episode="{{ episode.id }}">
+											{% else %}
+												<span class="am-check lib-nocheck" aria-hidden="true"></span>
+											{% endif %}
+											<span class="am-code cn-mono">S{{ season.number|stringformat:"02d" }}E{{ episode.number|stringformat:"02d" }}</span>
+											<span class="am-ep" data-no-tr>{{ episode.title }}</span>
+											{% if episode.air_date and episode.state != "unaired" %}<span class="lib-date cn-mono">{{ episode.air_date|date:"Y-m-d" }}</span>{% endif %}
+										</label>
+										{% if episode.queue %}{% include "searchapp/_arr_missing_state.html" with state=episode.queue %}{% else %}{% include "searchapp/_arr_library_state.html" with state=episode.state kind="episode" air_date=episode.air_date cls="am-state-tag" %}{% endif %}
+										{% if episode.state == "missing" %}
+											<button class="cn-opt am-lang-btn" type="button" data-am-check-episode="{{ episode.id }}" aria-describedby="am-r-e{{ episode.id }}">Check languages</button>
+											<div class="am-result" id="am-r-e{{ episode.id }}" role="status" aria-live="polite"></div>
+										{% endif %}
+									</li>
+								{% endfor %}
+							</ul>
+						</div>
+					</article>
+				{% empty %}
+					<p class="cn-empty">Sonarr has no episodes for this series yet.</p>
+				{% endfor %}
+			</section>
+		{% endif %}
+
+		<div class="am-bar" id="am-bar" inert>
+			<span class="am-bar-count" id="am-count" role="status" aria-live="polite">Nothing selected</span>
+			<p class="am-bar-msg" id="am-msg" role="status" aria-live="polite"></p>
+			<button class="cn-cta" type="button" id="am-download" disabled>Download selected</button>
+		</div>
+	</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if item %}
+<script src="{% static 'searchapp/arr_missing.js' %}?v={{ app_version }}"
+        data-download-url="{% url 'arr_missing_download' %}"
+        data-check-url="{% url 'arr_missing_check' %}"
+        data-csrf="{{ csrf_token }}"></script>
+{% endif %}
+{% endblock %}

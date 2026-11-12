@@ -1,0 +1,95 @@
+{% extends "searchapp/cinema_base.html" %}
+{% load static %}
+
+{% block title %}Library — VibraVid{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{% static 'searchapp/arr_missing.css' %}?v={{ app_version }}" />
+<link rel="stylesheet" href="{% static 'searchapp/arr_library.css' %}?v={{ app_version }}" />
+{% endblock %}
+
+{% block content %}
+<div class="cn-pad am-page lib-page" style="padding-top:34px">
+
+	<div class="cn-page-hd">
+		<h1 class="cn-blast">Library</h1>
+		<p>Every series in Sonarr and every movie in Radarr, with what you already have and what is still missing. Open a title to see its seasons and pick what to download.</p>
+	</div>
+
+	{% if not configured %}
+		<div class="am-state">
+			<h2>Sonarr and Radarr are not connected</h2>
+			<p>Add their URL and API key in the ARR section of the settings, then come back here.</p>
+			<a class="cn-cta" href="{% url 'settings_editor' %}">Open settings</a>
+		</div>
+	{% else %}
+		<div class="cn-slab am-slab">
+			<div class="cn-big"><span class="cn-v">{{ series|length }}</span><span class="cn-k">Series</span></div>
+			<div class="cn-big"><span class="cn-v">{{ movies|length }}</span><span class="cn-k">Movies</span></div>
+			<div class="cn-big"><span class="cn-v{% if missing_episodes %} is-hot{% endif %}">{{ missing_episodes }}</span><span class="cn-k">Missing episodes</span></div>
+			<div class="cn-big"><span class="cn-v{% if missing_movies %} is-hot{% endif %}">{{ missing_movies }}</span><span class="cn-k">Missing movies</span></div>
+			<span class="am-slab-actions">
+				<a class="cn-cta is-ghost" href="{% url 'arr_stack' %}">ARR Queue</a>
+				<a class="cn-cta" href="{% url 'arr_missing' %}">Missing from library</a>
+			</span>
+		</div>
+
+		{% for label in unreachable %}
+			<p class="cn-msg is-bad" role="alert">{{ label }} did not answer, so its titles are not listed. Check that it is running and that the API key is right.</p>
+		{% endfor %}
+
+		{% if series or movies %}
+			<div class="am-tools lib-tools">
+				<div class="cn-fgroup am-search">
+					<label class="cn-tag" for="lib-filter">Filter</label>
+					<input class="cn-input" id="lib-filter" type="search" placeholder="Series or movie title" autocomplete="off">
+				</div>
+				<div class="cn-fgroup">
+					<span class="cn-tag" id="lib-kind-l">Show</span>
+					<div class="cn-opts" role="group" aria-labelledby="lib-kind-l">
+						<button class="cn-opt" type="button" data-lib-kind="all" aria-pressed="true">All</button>
+						{% if series %}<button class="cn-opt" type="button" data-lib-kind="series" aria-pressed="false">Series<span class="cn-opt-n">{{ series|length }}</span></button>{% endif %}
+						{% if movies %}<button class="cn-opt" type="button" data-lib-kind="movies" aria-pressed="false">Movies<span class="cn-opt-n">{{ movies|length }}</span></button>{% endif %}
+					</div>
+				</div>
+				<button class="cn-opt lib-only" type="button" id="lib-missing" aria-pressed="false">Only with missing</button>
+			</div>
+
+			{% if series %}
+				<section class="am-group lib-group" data-lib-group="series" aria-labelledby="lib-series-h">
+					<div class="cn-strip-hd am-group-hd">
+						<h2 id="lib-series-h">Series</h2>
+						<span class="cn-n">{{ series|length }} series · {{ missing_episodes }} missing episodes</span>
+					</div>
+					<div class="lib-grid">
+						{% for card in series %}{% include "searchapp/_arr_library_tile.html" %}{% endfor %}
+					</div>
+				</section>
+			{% endif %}
+
+			{% if movies %}
+				<section class="am-group lib-group" data-lib-group="movies" aria-labelledby="lib-movies-h">
+					<div class="cn-strip-hd am-group-hd">
+						<h2 id="lib-movies-h">Movies</h2>
+						<span class="cn-n">{{ movies|length }} movies · {{ missing_movies }} missing</span>
+					</div>
+					<div class="lib-grid">
+						{% for card in movies %}{% include "searchapp/_arr_library_tile.html" %}{% endfor %}
+					</div>
+				</section>
+			{% endif %}
+
+			<p class="cn-empty am-nomatch" id="lib-nomatch" role="status" hidden>No title matches these filters.</p>
+		{% elif not unreachable %}
+			<div class="am-state">
+				<h2>Nothing in Sonarr or Radarr yet</h2>
+				<p>Add a series in Sonarr or a movie in Radarr and it will show up here.</p>
+			</div>
+		{% endif %}
+	{% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'searchapp/arr_library.js' %}?v={{ app_version }}"></script>
+{% endblock %}

@@ -1,0 +1,13 @@
+<a class="cn-tile lib-tile" href="{% if card.kind == 'movie' %}{% url 'arr_movie_detail' card.id %}{% else %}{% url 'arr_series_detail' card.id %}{% endif %}"
+   data-lib-item data-missing="{{ card.missing }}" data-title="{{ card.title|lower }}">
+	<span class="cn-poster">
+		{% if card.poster %}<img src="{{ card.poster }}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" width="200" height="300" onerror="this.remove()">{% endif %}
+		<span class="cn-poster-fill"><span class="cn-rule"></span><span class="cn-ptitle" data-no-tr>{{ card.title }}</span></span>
+		<span class="cn-flag">{% include "searchapp/_arr_library_state.html" with state=card.state kind=card.kind missing=card.missing %}</span>
+		{% if card.kind == "serie" and card.aired %}<span class="cn-runbar" aria-hidden="true"><i style="width:{{ card.percent }}%"></i></span>{% endif %}
+	</span>
+	<span class="lib-cap">
+		<span class="cn-cap" data-no-tr>{{ card.title }}</span>
+		<span class="cn-sub">{% if card.year %}<span class="cn-num">{{ card.year }}</span>{% endif %}{% if card.kind == "serie" %}{% if card.year %} · {% endif %}<span class="cn-num">{{ card.have }}/{{ card.aired }}</span> <span>episodes</span>{% elif card.runtime %}{% if card.year %} · {% endif %}<span class="cn-num">{{ card.runtime }}</span> <span>min</span>{% endif %}</span>
+	</span>
+</a>

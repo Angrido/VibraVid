@@ -61,6 +61,8 @@
 				   {% if nav_active == 'download' %}aria-current="page"{% endif %}>Download</a>
 				<a href="{% url 'watchlist' %}"
 				   {% if nav_active == 'watchlist' %}aria-current="page"{% endif %}>Watchlist</a>
+				<a href="{% url 'arr_library' %}"
+				   {% if nav_active == 'arr' %}aria-current="page"{% endif %}>Library</a>
 				<a href="{% url 'settings_editor' %}"
 				   {% if nav_active == 'settings' %}aria-current="page"{% endif %}>Settings</a>
 				<a href="{% url 'logs_page' %}"

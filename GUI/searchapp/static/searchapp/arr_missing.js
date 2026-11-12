@@ -73,17 +73,17 @@
     function visibleLeaves() {
         return leaves().filter(input => !input.disabled && !input.closest("[data-am-item]").hidden);
     }
-    document.getElementById("am-select-all").addEventListener("click", () => {
+    document.getElementById("am-select-all")?.addEventListener("click", () => {
         visibleLeaves().forEach(input => { input.checked = true; });
         render();
     });
-    document.getElementById("am-clear").addEventListener("click", () => {
+    document.getElementById("am-clear")?.addEventListener("click", () => {
         leaves().forEach(input => { input.checked = false; });
         render();
     });
 
     let filterTimer;
-    filter.addEventListener("input", () => {
+    filter?.addEventListener("input", () => {
         clearTimeout(filterTimer);
         filterTimer = setTimeout(() => {
             const query = filter.value.trim().toLowerCase();
@@ -116,12 +116,13 @@
                 input.disabled = true;
                 const row = input.closest(".am-row");
                 row.classList.add("is-sent");
-                if (!row.querySelector(".am-state-tag")) {
-                    const tag = document.createElement("span");
-                    tag.className = "cn-st is-warn am-state-tag";
-                    tag.textContent = tr("Queued");
+                let tag = row.querySelector(".am-state-tag");
+                if (!tag) {
+                    tag = document.createElement("span");
                     row.querySelector(".am-pick").after(tag);
                 }
+                tag.className = "cn-st is-warn am-state-tag";
+                tag.textContent = tr("Queued");
             });
             const notes = [tr("{n} queued for download.").replace("{n}", result.queued)];
             if (result.skipped) notes.push(tr("{n} already in the queue.").replace("{n}", result.skipped));
