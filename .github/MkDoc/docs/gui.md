@@ -104,6 +104,14 @@ A banner appears when a newer release exists (`api/version/check/`, cached 1 h);
 
 ![ARR queue](assets/gui/arr_stack.png)
 
+## Look and motion
+
+The GUI uses a "darkroom" style: warm ink background, bone text, a single safelight orange accent and a film-perforation rule under the header and page titles. Headings use the system serif (Iowan Old Style / Palatino / Georgia), body text the bundled Inter, and labels, counters and timecodes a monospace font.
+
+All colours, radii and motion timings are CSS variables on `.cn` in `GUI/searchapp/static/searchapp/cinema.css` (`--cn-hot` accent, `--cn-focus` focus ring, `--cn-ease-out`, `--cn-t`…). New pages and components should use these tokens instead of fixed colours.
+
+Motion is limited to things that carry meaning: pages cross-fade and the active menu underline slides between sections (View Transitions, Chromium-based browsers), lists and poster grids enter with a short stagger, posters catch a light sweep on hover, and progress bars carry a moving sheen while running. With *Reduce motion* enabled in the operating system all of it is switched off.
+
 ## CSRF & reverse proxy
 
 Behind a reverse proxy or outside the LAN, Django may reject requests on CSRF checks. Set as needed:
