@@ -24,6 +24,7 @@ import django
 django.setup()
 
 import pytest
+import requests
 
 from searchapp.arr.clients import radarr_client, sonarr_client
 from searchapp.arr.processor_service import ArrProcessorService
@@ -101,6 +102,13 @@ def test_a_wrong_api_key_is_reported_unavailable(arr):
 
     assert sonarr_client.SonarrClient(arr.url, "bad-key", timeout=5, max_retries=1).is_available() is False
     assert radarr_client.RadarrClient(arr.url, API_KEY, timeout=5, max_retries=1).is_available() is True
+
+
+def test_client_errors_are_not_retried(arr):
+    with pytest.raises(requests.HTTPError):
+        sonarr_client.SonarrClient(arr.url, "bad-key", timeout=5, max_retries=3).system_status()
+
+    assert len(arr.calls) == 1
 
 
 def test_transient_server_errors_are_retried(client, arr):

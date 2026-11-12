@@ -37,6 +37,10 @@ class ArrClient:
                 return resp
             except requests.RequestException as exc:
                 last_exc = exc
+                status = exc.response.status_code if exc.response is not None else None
+                if status is not None and 400 <= status < 500 and status not in (408, 429):
+                    self.logger.error(f"{self.label} request {method} {path} rejected: {exc}")
+                    raise
                 self.logger.warning(f"{self.label} request {method} {path} attempt {attempt}/{self.max_retries} failed: {exc}")
 
         self.logger.error(f"{self.label} request {method} {path} failed after {self.max_retries} attempts")
