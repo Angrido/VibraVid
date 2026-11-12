@@ -5,7 +5,7 @@ import re
 import pytest
 from playwright.sync_api import expect
 
-PAGES = ["/", "/downloads/", "/watchlist/", "/settings/", "/logs/"]
+PAGES = ["/", "/downloads/", "/watchlist/", "/arr/", "/arr-stack/", "/arr-missing/", "/settings/", "/logs/"]
 
 
 def open_more_menu_if_phone(page, device):
