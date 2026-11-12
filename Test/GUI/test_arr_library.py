@@ -197,3 +197,15 @@ def test_title_page_explains_when_sonarr_does_not_answer(client, arr, monkeypatc
 
     assert response.status_code == 200
     assert "This title could not be loaded" in response.content.decode()
+
+
+def test_title_pages_trust_sonarr_and_radarr_over_an_old_queue_state(arr):
+    _queue("sonarr_7_s1_e1", ArrMediaRequest.Status.COMPLETED)
+    _queue("sonarr_7_s1_e2", ArrMediaRequest.Status.IMPORT_PENDING)
+    _queue("radarr_32", ArrMediaRequest.Status.COMPLETED)
+
+    episodes = {e["id"]: e for season in library_service.series_detail(7)["seasons"] for e in season["episodes"]}
+
+    assert (episodes[701]["state"], episodes[701]["queue"]) == ("complete", "")
+    assert episodes[702]["queue"] == "import_pending"
+    assert library_service.movie_detail(32)["item"]["queue"] == ""
