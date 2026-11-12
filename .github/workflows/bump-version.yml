@@ -1,54 +1,71 @@
 name: Bump Version
 
 on:
+    push:
+        branches:
+            - main
     workflow_dispatch:
         inputs:
             bump_type:
-                description: 'Tipo di bump versione'
+                description: 'Tipo di bump versione (auto = in base ai commit dall ultimo rilascio)'
                 required: true
-                default: 'patch'
+                default: 'auto'
                 type: choice
                 options:
+                    - auto
                     - patch
                     - minor
                     - major
 
 permissions:
     contents: write
+    actions: write
+
+concurrency:
+    group: bump-version
+    cancel-in-progress: false
 
 jobs:
     bump-version:
+        if: ${{ !startsWith(github.event.head_commit.message, '[RELEASE]') }}
         runs-on: ubuntu-latest
         steps:
             - name: Checkout repository
               uses: actions/checkout@v7
               with:
+                  ref: ${{ github.ref_name }}
+                  fetch-depth: 0
                   token: ${{ secrets.GITHUB_TOKEN }}
 
-            - name: Bump version in version.py
+            - name: Bump version in version.py and pyproject.toml
               id: bump
+              env:
+                  BUMP_TYPE: ${{ github.event.inputs.bump_type || 'auto' }}
               run: |
-                  CURRENT=$(grep -oP '__version__ = "\K[^"]+' VibraVid/utils/upload/version.py)
-                  MAJOR=$(echo "$CURRENT" | cut -d. -f1)
-                  MINOR=$(echo "$CURRENT" | cut -d. -f2)
-                  PATCH=$(echo "$CURRENT" | cut -d. -f3)
-
-                  case "${{ github.event.inputs.bump_type }}" in
-                      major) MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0 ;;
-                      minor) MINOR=$((MINOR+1)); PATCH=0 ;;
-                      patch) PATCH=$((PATCH+1)) ;;
-                  esac
-
-                  NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-                  sed -i "s/__version__ = \".*\"/__version__ = \"$NEW_VERSION\"/" VibraVid/utils/upload/version.py
-
-                  echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-                  echo "old_version=$CURRENT" >> $GITHUB_OUTPUT
+                  NEW_VERSION=$(python3 .github/scripts/version_bump.py --level "$BUMP_TYPE")
+                  echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+                  if [ -z "$NEW_VERSION" ]; then
+                      echo "No releasable changes since the last release."
+                  fi
 
             - name: Commit and push version bump
+              if: steps.bump.outputs.new_version != ''
+              env:
+                  NEW_VERSION: ${{ steps.bump.outputs.new_version }}
+                  ACTOR: ${{ github.actor }}
+                  BRANCH: ${{ github.ref_name }}
               run: |
                   git config user.name "github-actions[bot]"
                   git config user.email "github-actions[bot]@users.noreply.github.com"
-                  git add VibraVid/utils/upload/version.py
-                  git commit -m "[RELEASE] Version ${{ steps.bump.outputs.new_version }} by @${{ github.actor }}"
-                  git push
+                  git add VibraVid/utils/upload/version.py pyproject.toml
+                  git commit -m "[RELEASE] Version $NEW_VERSION by @$ACTOR"
+                  git push origin "HEAD:$BRANCH"
+
+            - name: Start release builds
+              if: steps.bump.outputs.new_version != ''
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  BRANCH: ${{ github.ref_name }}
+              run: |
+                  gh workflow run build.yml --ref "$BRANCH"
+                  gh workflow run docker-publish.yml --ref "$BRANCH"
