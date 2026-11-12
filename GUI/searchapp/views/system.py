@@ -7,14 +7,22 @@ import time
 
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.http import require_http_methods
+from searchapp.api import get_available_sites
 
 from VibraVid.utils import config_manager
 
 from .. import services_admin
 from ..security import require_service_upload
+from ..site_reachability import check_sites
 from ._shared import _UPDATE_CHECK_TTL, _update_check_cache
 
 logger = logging.getLogger(__name__)
+
+
+@require_http_methods(["GET"])
+def site_status(request: HttpRequest) -> JsonResponse:
+    refresh = request.GET.get("refresh") == "1"
+    return JsonResponse({"sites": check_sites(sorted(get_available_sites()), refresh=refresh)})
 
 
 @require_http_methods(["GET"])
@@ -198,6 +206,7 @@ def trigger_update(request: HttpRequest) -> JsonResponse:
     return JsonResponse(result)
 
 __all__ = [
+    'site_status',
     'registry_status', 'site_cli_options_schema', 'reload_config',
     'check_updates', 'trigger_binaries_update', 'refresh_external_import', 'trigger_update',
 ]
