@@ -283,3 +283,50 @@ def test_missing_page_marks_each_state_slot_for_live_updates(client, arr):
     assert 'data-am-key="radarr_31" data-am-state="pending"' in page
     assert 'data-am-key="sonarr_7_s1_e1" data-am-state=""' in page
     assert 'data-states-url="/api/arr/missing/states/"' in page
+
+
+class FilesOnArr:
+    label = "Arr"
+
+    def __init__(self, error=None):
+        self.error = error
+
+    def get_movie_by_id(self, movie_id):
+        if self.error:
+            raise self.error
+        return {"id": movie_id, "hasFile": movie_id == 31}
+
+    def get_episodes_for_series(self, series_id):
+        if self.error:
+            raise self.error
+        return [
+            {"seasonNumber": 1, "episodeNumber": 1, "hasFile": True},
+            {"seasonNumber": 1, "episodeNumber": 2, "hasFile": False},
+        ]
+
+
+def test_states_endpoint_shows_imported_when_sonarr_or_radarr_has_the_file(client, monkeypatch):
+    monkeypatch.setattr(manual_service, "_load_arr_config", lambda: {})
+    monkeypatch.setattr(manual_service, "_build_clients", lambda cfg: (FilesOnArr(), FilesOnArr()))
+    _queue("radarr_31", ArrMediaRequest.Status.COMPLETED)
+    _queue("sonarr_7_s1_e1", ArrMediaRequest.Status.IMPORT_PENDING)
+    _queue("sonarr_7_s1_e2", ArrMediaRequest.Status.COMPLETED)
+
+    states = client.get("/api/arr/missing/states/", {"keys": "radarr_31,sonarr_7_s1_e1,sonarr_7_s1_e2"}).json()["states"]
+
+    assert states["radarr_31"]["state"] == "imported" and "In library" in states["radarr_31"]["html"]
+    assert states["sonarr_7_s1_e1"]["state"] == "imported"
+    assert states["sonarr_7_s1_e2"]["state"] == "completed" and "Downloaded, not imported" in states["sonarr_7_s1_e2"]["html"]
+
+
+def test_states_endpoint_keeps_the_queue_state_when_arr_does_not_answer(client, monkeypatch):
+    import requests
+
+    broken = FilesOnArr(requests.ConnectionError("refused"))
+    monkeypatch.setattr(manual_service, "_load_arr_config", lambda: {})
+    monkeypatch.setattr(manual_service, "_build_clients", lambda cfg: (broken, broken))
+    _queue("radarr_31", ArrMediaRequest.Status.COMPLETED)
+
+    states = client.get("/api/arr/missing/states/", {"keys": "radarr_31"}).json()["states"]
+
+    assert states["radarr_31"]["state"] == "completed"

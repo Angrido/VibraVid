@@ -146,7 +146,7 @@ def series_detail(series_id: int) -> dict[str, Any]:
         number = episode["seasonNumber"]
         season = seasons.setdefault(number, {"number": number, "episodes": [], "have": 0, "missing": 0})
         state = _episode_state(episode, monitored, now)
-        queued = queue.get(f"sonarr_{series_id}_s{number}_e{episode['episodeNumber']}", "")
+        queued = "" if state == "complete" else queue.get(f"sonarr_{series_id}_s{number}_e{episode['episodeNumber']}", "")
         season["episodes"].append(
             {
                 "id": episode["id"],
@@ -183,7 +183,7 @@ def movie_detail(movie_id: int) -> dict[str, Any]:
         raise ArrNotConfigured
     movie = radarr.get_movie_by_id(movie_id)
     card = _movie_card(movie)
-    queued = _queue_states([f"radarr_{movie_id}"]).get(f"radarr_{movie_id}", "")
+    queued = "" if card["state"] == "complete" else _queue_states([f"radarr_{movie_id}"]).get(f"radarr_{movie_id}", "")
     return {
         "item": {**card, **_details(movie), "queue": queued},
         "selectable": card["state"] == "missing" and queued not in BUSY_QUEUE_STATES,

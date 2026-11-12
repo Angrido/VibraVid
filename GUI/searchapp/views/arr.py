@@ -657,12 +657,12 @@ def arr_missing_download(request: HttpRequest) -> JsonResponse:
 
 @require_http_methods(["GET"])
 def arr_missing_states(request: HttpRequest) -> JsonResponse:
-    from ..arr.manual_service import _queue_states
+    from ..arr.manual_service import live_queue_states
 
     keys = list(dict.fromkeys(key for key in request.GET.get("keys", "").split(",") if QUEUE_KEY.fullmatch(key)))
     if not keys or len(keys) > MAX_QUEUE_KEYS:
         return JsonResponse({"status": "error", "message": "Send between 1 and 500 valid queue keys."}, status=400)
-    states = _queue_states(keys)
+    states = live_queue_states(keys)
     return JsonResponse({
         "status": "ok",
         "states": {

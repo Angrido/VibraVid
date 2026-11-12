@@ -2,8 +2,10 @@
 
 import logging
 import threading
+from collections import defaultdict
 from typing import Any
 
+import requests
 from django.db import close_old_connections
 
 from .arr_service import (
@@ -21,6 +23,7 @@ from .processor_service import ArrProcessorService
 logger = logging.getLogger("ARR")
 
 MANUAL_SOURCE = "manual_resync"
+AWAITING_IMPORT_STATES = ("completed", "import_pending")
 
 
 class ArrNotConfigured(Exception):
@@ -42,6 +45,39 @@ def _queue_states(keys: list[str]) -> dict[str, str]:
 
     entries = ArrProcessingQueue.objects.filter(dedup_key__in=keys).select_related("media_request")
     return {entry.dedup_key: entry.media_request.status for entry in entries}
+
+
+def _keys_with_file(keys: list[str]) -> set[str]:
+    sonarr, radarr = _build_clients(_load_arr_config())
+    found: set[str] = set()
+    series_keys: dict[int, set[str]] = defaultdict(set)
+    for key in keys:
+        source, arr_id = key.split("_")[:2]
+        if source == "sonarr":
+            series_keys[int(arr_id)].add(key)
+        elif radarr and radarr.get_movie_by_id(int(arr_id)).get("hasFile"):
+            found.add(key)
+    for series_id, wanted in series_keys.items():
+        if not sonarr:
+            break
+        episodes = sonarr.get_episodes_for_series(series_id)
+        found |= wanted & {
+            f"sonarr_{series_id}_s{e['seasonNumber']}_e{e['episodeNumber']}" for e in episodes if e.get("hasFile")
+        }
+    return found
+
+
+def live_queue_states(keys: list[str]) -> dict[str, str]:
+    states = _queue_states(keys)
+    awaiting = [key for key, state in states.items() if state in AWAITING_IMPORT_STATES]
+    if not awaiting:
+        return states
+    try:
+        imported = _keys_with_file(awaiting)
+    except requests.RequestException as exc:
+        logger.warning(f"Could not ask Sonarr/Radarr whether downloads were imported: {exc}")
+        return states
+    return {key: "imported" if key in imported else state for key, state in states.items()}
 
 
 def scan_missing() -> dict[str, Any]:

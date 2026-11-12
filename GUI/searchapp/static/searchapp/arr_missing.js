@@ -11,6 +11,8 @@
     const leaves = () => [...document.querySelectorAll("[data-am-episode], [data-am-movie]")];
     let holdBar = false;
     const ACTIVE_STATES = ["pending", "downloading"];
+    const AWAITING_IMPORT_STATES = ["completed", "import_pending"];
+    const IMPORT_WATCH_MS = 120000;
     let pollTimer = null;
 
     async function post(url, body) {
@@ -136,18 +138,23 @@
     });
 
     function activeSlots() {
-        return [...document.querySelectorAll("[data-am-key]")].filter(slot => ACTIVE_STATES.includes(slot.dataset.amState));
+        return [...document.querySelectorAll("[data-am-key]")].filter(slot =>
+            ACTIVE_STATES.includes(slot.dataset.amState)
+            || (AWAITING_IMPORT_STATES.includes(slot.dataset.amState) && Date.now() < Number(slot.dataset.amWatchUntil || 0)));
     }
 
     function applyState(slot, entry) {
-        const active = ACTIVE_STATES.includes(entry.state);
+        const locked = ACTIVE_STATES.includes(entry.state) || entry.state === "imported";
+        if (AWAITING_IMPORT_STATES.includes(entry.state) && ACTIVE_STATES.includes(slot.dataset.amState)) {
+            slot.dataset.amWatchUntil = String(Date.now() + IMPORT_WATCH_MS);
+        }
         slot.dataset.amState = entry.state;
         slot.innerHTML = entry.html;
         const row = slot.closest(".am-row");
         const input = row.querySelector("[data-am-episode], [data-am-movie]");
-        input.disabled = active;
-        if (active) input.checked = false;
-        if (!active) row.classList.remove("is-sent");
+        input.disabled = locked;
+        if (locked) input.checked = false;
+        row.classList.toggle("is-sent", ACTIVE_STATES.includes(entry.state));
     }
 
     async function refreshStates(slots) {
