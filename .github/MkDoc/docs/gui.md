@@ -80,13 +80,13 @@ Set `VIBRAVID_BOT_SECRET` to require a matching `X-VibraVid-Token` header. Witho
 
 ### Language
 
-The GUI is available in English and Italian. The selector in the header picks the language for that browser; `gui_language` in `config.toml` (`auto`, `en`, `it`) sets the default, and `auto` follows the browser's language.
+The GUI is available in English and Italian. The selector at the bottom of the sidebar (under **More** on phones) picks the language for that browser; `gui_language` in `config.toml` (`auto`, `en`, `it`) sets the default, and `auto` follows the browser's language.
 
 Translations live in `GUI/searchapp/i18n/<code>.json`: a flat object that maps the English text to its translation, with `{name}` capturing variable parts (`"{n} seasons": "{n} stagioni"`). A missing entry simply stays in English, so a new language is one file and no code; the selector lists it automatically. Provider content (titles, captions) and log lines are never translated.
 
 ### Login
 
-By default the GUI has no login. Set `VIBRAVID_USERNAME` and `VIBRAVID_PASSWORD` to require one on every page (5 failed attempts per address lock the login for 5 minutes). Webhooks, the Telegram bot (`VIBRAVID_BOT_SECRET`) and the remote API keep their own tokens; with the login on, a webhook without its `webhook_secret` and a bot without `VIBRAVID_BOT_SECRET` are refused. See [Securing the GUI](docker.md#securing-the-gui).
+By default the GUI has no login. Set `VIBRAVID_USERNAME` and `VIBRAVID_PASSWORD` to require one on every page (5 failed attempts per address lock the login for 5 minutes). After a wrong password the username stays filled in and the password field gets the focus. Webhooks, the Telegram bot (`VIBRAVID_BOT_SECRET`) and the remote API keep their own tokens; with the login on, a webhook without its `webhook_secret` and a bot without `VIBRAVID_BOT_SECRET` are refused. See [Securing the GUI](docker.md#securing-the-gui).
 
 ### Custom service upload
 
@@ -105,13 +105,27 @@ A banner appears when a newer release exists (`api/version/check/`, cached 1 h);
 
 ![ARR queue](assets/gui/arr_stack.png)
 
-## Look and motion
+## Layout, look and motion
 
-The GUI uses a "darkroom" style: warm ink background, bone text, a single safelight orange accent and a film-perforation rule under the header and page titles. Headings use the system serif (Iowan Old Style / Palatino / Georgia), body text the bundled Inter, and labels, counters and timecodes a monospace font.
+On screens 1024 px and wider the sections sit in a sidebar on the left: Search, Download (with a live counter of running downloads), Watchlist and Library at the top, Settings and Logs at the bottom next to the language selector, Donate and the version. On tablets and phones the same four main sections move to a tab bar at the bottom of the screen; **More** opens a panel with Settings, Logs, language and logout (Escape or a tap outside closes it). Settings tabs have their own address (`/settings/#arr`, `#plug`…), so a tab can be bookmarked or linked.
 
-All colours, radii and motion timings are CSS variables on `.cn` in `GUI/searchapp/static/searchapp/cinema.css` (`--cn-hot` accent, `--cn-focus` focus ring, `--cn-ease-out`, `--cn-t`…). New pages and components should use these tokens instead of fixed colours.
+The style is called "Signal": near-black surfaces, light text, a single orange accent for the main action on each screen and status colours that always come with a text label. Text uses the bundled Inter, and counters and timecodes a monospace font. Buttons and other touch targets are at least 44 px tall on touch screens, every control works with the keyboard and shows a visible focus ring, and no action is hidden behind hover.
 
-Motion is limited to things that carry meaning: pages cross-fade and the active menu underline slides between sections (View Transitions, Chromium-based browsers), lists and poster grids enter with a short stagger, posters catch a light sweep on hover, and progress bars carry a moving sheen while running. With *Reduce motion* enabled in the operating system all of it is switched off.
+All colours, radii, spacing and motion timings are CSS variables on `.cn` in `GUI/searchapp/static/searchapp/cinema.css` (`--cn-hot` accent, `--cn-focus` focus ring, `--cn-ease-out`, `--cn-t`…), documented in `design-system/MASTER.md`. New pages and components should use these tokens instead of fixed colours.
+
+Motion is limited to things that carry meaning: pages cross-fade between sections (View Transitions, Chromium-based browsers), lists and poster grids enter with a short stagger, the More panel and dialogs slide up from the bottom on phones, and running downloads show a moving progress sheen and a small equaliser. With *Reduce motion* enabled in the operating system all of it is switched off.
+
+### End-to-end tests
+
+`Test/e2e` drives the real GUI in Chromium with Playwright, once at desktop size (1440×900) and once as a phone (390×844, touch). Providers, TMDB and the download tracker are replaced with fakes, so the tests never touch the network. Run them with:
+
+```bash
+pip install playwright
+python -m playwright install chromium
+python -m pytest Test/e2e -q
+```
+
+Without Playwright installed the folder is skipped.
 
 ## CSRF & reverse proxy
 

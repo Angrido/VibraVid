@@ -1,45 +1,68 @@
 {% load static %}
 <!doctype html>
-{% comment %}
-	Pagina di login minimale: non estende cinema_base.html perche' il guscio
-	controlla gli aggiornamenti e carica API che richiedono gia' una sessione.
-{% endcomment %}
 <html lang="{{ gui_lang|default:'en' }}">
 	<head>
 		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<meta name="theme-color" content="#0D0C0A" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<meta name="theme-color" content="#0A0B0E" />
+		<meta name="color-scheme" content="dark" />
 		<title>VibraVid - Login</title>
 		<link rel="icon" type="image/svg+xml" href="{% static 'searchapp/img/logo.svg' %}" />
 		<link rel="icon" type="image/png" href="{% static 'searchapp/img/favicon.png' %}" />
-		<link rel="stylesheet" href="{% static 'searchapp/cinema.css' %}" />
-		<style>
-			.cn-login { max-width: 400px; margin: 0 auto; padding: 16vh 16px 48px; }
-			.cn-login .cn-wordmark { margin-bottom: 40px; animation: cn-rise var(--cn-t-slow) var(--cn-ease-out) both; }
-			.cn-login form { display: grid; gap: 18px; padding: 28px; animation: cn-rise var(--cn-t-slow) var(--cn-ease-out) 80ms both; }
-			.cn-login .cn-cta { margin-top: 6px; width: 100%; }
-			.cn-login .cn-error { color: var(--cn-hot-ink); font-size: 14px; margin: 0; padding: 10px 14px; border-radius: var(--cn-radius-sm); background: rgba(var(--cn-hot-a), .1); box-shadow: inset 3px 0 0 var(--cn-hot); }
-			.cn-login-lang { position: fixed; top: 14px; right: 16px; z-index: 2; }
-			.cn-login-glow { position: fixed; inset: auto -20vw -40vh auto; width: 80vw; height: 80vh; z-index: -1; pointer-events: none; background: radial-gradient(closest-side, rgba(var(--cn-hot-a), .18), transparent); }
-		</style>
+		<link rel="stylesheet" href="{% static 'searchapp/cinema.css' %}?v={{ app_version }}" />
 		{% include "searchapp/_i18n_boot.html" %}
 	</head>
-	<body class="cn">
+	<body class="cn cn-login-page">
+		{% include "searchapp/_icons.html" %}
 		<div class="cn-login-lang">{% include "searchapp/_lang_select.html" %}</div>
 		<div class="cn-login-glow" aria-hidden="true"></div>
 		<main class="cn-login">
-			<span class="cn-wordmark" aria-hidden="true">Vibra<i>Vid</i></span>
-			<div class="cn-page-hd"><h1>Sign in</h1></div>
-			<form class="cn-box" method="post" action="{% url 'login' %}">
+			<span class="cn-wordmark" aria-hidden="true"><span>Vibra<i>Vid</i></span></span>
+			<div class="cn-page-hd">
+				<h1>Sign in</h1>
+				<p>Use the username and password set for this server.</p>
+			</div>
+			<form class="cn-box" method="post" action="{% url 'login' %}" id="cn-login-form">
 				{% csrf_token %}
 				<input type="hidden" name="next" value="{{ next }}" />
-				{% if error %}<p class="cn-error" role="alert">{{ error }}</p>{% endif %}
-				<label class="cn-field"><span>Username</span>
-					<input class="cn-input" type="text" name="username" autocomplete="username" autofocus required /></label>
-				<label class="cn-field"><span>Password</span>
-					<input class="cn-input" type="password" name="password" autocomplete="current-password" required /></label>
+				{% if error %}<p class="cn-msg is-bad cn-error" role="alert" id="cn-login-error">{{ error }}</p>{% endif %}
+				<div class="cn-field">
+					<label for="cn-user">Username</label>
+					<input class="cn-input" id="cn-user" type="text" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required value="{{ username }}"{% if not username %} autofocus{% endif %}{% if error %} aria-describedby="cn-login-error"{% endif %} />
+				</div>
+				<div class="cn-field">
+					<label for="cn-pass">Password</label>
+					<span class="cn-pw">
+						<input class="cn-input" id="cn-pass" type="password" name="password" autocomplete="current-password" required{% if username %} autofocus{% endif %}{% if error %} aria-describedby="cn-login-error" aria-invalid="true"{% endif %} />
+						<button type="button" id="cn-pass-toggle" aria-label="Show password" aria-pressed="false" aria-controls="cn-pass">
+							<svg class="cn-ico" aria-hidden="true"><use href="#i-eye"/></svg>
+						</button>
+					</span>
+				</div>
 				<button class="cn-cta" type="submit">Sign in</button>
 			</form>
 		</main>
+		<script>
+			(function () {
+				var input = document.getElementById("cn-pass");
+				var toggle = document.getElementById("cn-pass-toggle");
+				var form = document.getElementById("cn-login-form");
+				toggle.addEventListener("click", function () {
+					var show = input.type === "password";
+					input.type = show ? "text" : "password";
+					toggle.setAttribute("aria-pressed", String(show));
+					toggle.setAttribute("aria-label", show ? t("Hide password") : t("Show password"));
+				});
+				var button = form.querySelector('button[type="submit"]');
+				form.addEventListener("submit", function () {
+					button.disabled = true;
+					button.setAttribute("aria-busy", "true");
+				});
+				window.addEventListener("pageshow", function () {
+					button.disabled = false;
+					button.removeAttribute("aria-busy");
+				});
+			})();
+		</script>
 	</body>
 </html>

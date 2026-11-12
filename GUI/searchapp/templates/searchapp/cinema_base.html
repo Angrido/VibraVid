@@ -1,113 +1,128 @@
 {% load static %}
 <!doctype html>
-{% comment %}
-	Guscio della UI. Layout tutto in cinema.css, palette fissa (niente
-	selettore temi).
-{% endcomment %}
 <html lang="{{ gui_lang|default:'en' }}">
 	<head>
 		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<meta name="theme-color" content="#0D0C0A" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<meta name="theme-color" content="#0A0B0E" />
+		<meta name="color-scheme" content="dark" />
 		<title>{% block title %}VibraVid{% endblock %}</title>
 
 		<link rel="icon" type="image/svg+xml" href="{% static 'searchapp/img/logo.svg' %}" />
 		<link rel="icon" type="image/png" href="{% static 'searchapp/img/favicon.png' %}" />
 		<link rel="apple-touch-icon" href="{% static 'searchapp/img/favicon.png' %}" />
+		<link rel="preload" href="{% static 'searchapp/fonts/inter-latin.woff2' %}" as="font" type="font/woff2" crossorigin />
 
-		<link rel="stylesheet" href="{% static 'searchapp/cinema.css' %}" />
-		<style>
-			/* App-update banner: kept inline (not in cinema.css) so it needs no cache-busting of its own -- this file is always served fresh. */
-			.cn-upd-banner {
-				display: flex; align-items: center; justify-content: center; gap: 14px;
-				flex-wrap: wrap; background: rgba(var(--cn-gold-a), .1);
-				border-bottom: 1px solid rgba(var(--cn-gold-a), .35); color: var(--cn-white);
-				font-size: 13px; font-weight: 600; padding: 10px 16px;
-			}
-			.cn-upd-banner[hidden] { display: none; }
-			.cn-upd-actions { display: flex; align-items: center; gap: 12px; }
-			.cn-upd-x {
-				background: none; border: 0; color: var(--cn-mute); font-size: 18px;
-				line-height: 1; cursor: pointer; padding: 0 4px;
-			}
-			.cn-upd-x:hover { color: var(--cn-white); }
-		</style>
-		{% comment %}
-			Funzioni condivise (duotone, titleize, esc…). Nel <head> senza defer:
-			sono usate dagli script in fondo alle pagine, che girano dopo, e il
-			file è piccolo.
-		{% endcomment %}
-		<script src="{% static 'searchapp/cinema.js' %}"></script>
+		<link rel="stylesheet" href="{% static 'searchapp/cinema.css' %}?v={{ app_version }}" />
+		<script src="{% static 'searchapp/cinema.js' %}?v={{ app_version }}"></script>
 		{% block head %}{% endblock %}
 		{% include "searchapp/_i18n_boot.html" %}
 	</head>
 
 	<body class="cn">
+		{% include "searchapp/_icons.html" %}
 		<a class="cn-sr" href="#cn-main">Skip to content</a>
 
-		{% comment %}
-			`is-float` = barra trasparente sfumata sull'hero. La mettono solo le
-			pagine che un hero ce l'hanno (plancia e dettaglio serie), e viene
-			tolta al primo scroll dallo script in fondo: altrimenti il titolo
-			della fila si legge attraverso il logo (§7.4).
-		{% endcomment %}
 		<header class="cn-top{% block top_float %}{% endblock %}" id="cn-top">
-			<a class="cn-wordmark" href="{% url 'search_home' %}">Vibra<i>Vid</i></a>
+			<a class="cn-wordmark" href="{% url 'search_home' %}" aria-label="VibraVid home"><span>Vibra<i>Vid</i></span></a>
 
 			<nav class="cn-menu" aria-label="Sections">
-				<a href="{% url 'search_home' %}"
-				   {% if nav_active == 'search' %}aria-current="page"{% endif %}>Search</a>
-				<a href="{% url 'download_dashboard' %}"
-				   {% if nav_active == 'download' %}aria-current="page"{% endif %}>Download</a>
-				<a href="{% url 'watchlist' %}"
-				   {% if nav_active == 'watchlist' %}aria-current="page"{% endif %}>Watchlist</a>
-				<a href="{% url 'arr_library' %}"
-				   {% if nav_active == 'arr' %}aria-current="page"{% endif %}>Library</a>
-				<a href="{% url 'settings_editor' %}"
-				   {% if nav_active == 'settings' %}aria-current="page"{% endif %}>Settings</a>
-				<a href="{% url 'logs_page' %}"
-				   {% if nav_active == 'logs' %}aria-current="page"{% endif %}>Logs</a>
+				<a href="{% url 'search_home' %}" {% if nav_active == 'search' %}aria-current="page"{% endif %}>
+					<svg class="cn-ico" aria-hidden="true"><use href="#i-search"/></svg><span>Search</span>
+				</a>
+				<a href="{% url 'download_dashboard' %}" {% if nav_active == 'download' %}aria-current="page"{% endif %}>
+					<svg class="cn-ico" aria-hidden="true"><use href="#i-download"/></svg><span>Download</span>
+					<span class="cn-nav-badge" id="cn-nav-active" title="Downloads running"{% if not active_downloads_count %} hidden{% endif %}>{{ active_downloads_count }}</span>
+				</a>
+				<a href="{% url 'watchlist' %}" {% if nav_active == 'watchlist' %}aria-current="page"{% endif %}>
+					<svg class="cn-ico" aria-hidden="true"><use href="#i-bookmark"/></svg><span>Watchlist</span>
+				</a>
+				<a href="{% url 'arr_library' %}" {% if nav_active == 'arr' %}aria-current="page"{% endif %}>
+					<svg class="cn-ico" aria-hidden="true"><use href="#i-film"/></svg><span>Library</span>
+				</a>
+				<button class="cn-menu-more" type="button" id="cn-more-btn" aria-expanded="false" aria-controls="cn-nav2">
+					<svg class="cn-ico" aria-hidden="true"><use href="#i-more"/></svg><span>More</span>
+				</button>
+
+				<div class="cn-nav2" id="cn-nav2">
+					<span class="cn-nav2-hd cn-tag">More</span>
+					<a href="{% url 'settings_editor' %}" {% if nav_active == 'settings' %}aria-current="page"{% endif %}>
+						<svg class="cn-ico" aria-hidden="true"><use href="#i-sliders"/></svg><span>Settings</span>
+					</a>
+					<a href="{% url 'logs_page' %}" {% if nav_active == 'logs' %}aria-current="page"{% endif %}>
+						<svg class="cn-ico" aria-hidden="true"><use href="#i-file"/></svg><span>Logs</span>
+					</a>
+					<div class="cn-top-right">
+						{% include "searchapp/_lang_select.html" %}
+						<a class="cn-donate is-love" href="https://www.paypal.com/donate/?hosted_button_id=UXTWMT8P6HE2C" target="_blank" rel="noopener">
+							<svg class="cn-ico is-sm" aria-hidden="true"><use href="#i-heart"/></svg>Donate
+						</a>
+						{% if gui_auth_enabled %}
+						<form method="post" action="{% url 'logout' %}">{% csrf_token %}
+							<button class="cn-donate" type="submit"><svg class="cn-ico is-sm" aria-hidden="true"><use href="#i-logout"/></svg>Logout</button>
+						</form>
+						{% endif %}
+						<span class="cn-vtag" title="Installed version">v{{ app_version }}</span>
+					</div>
+				</div>
 			</nav>
-
-			<div class="cn-top-right">
-				<span class="cn-vtag">v{{ app_version }}</span>
-				{% include "searchapp/_lang_select.html" %}
-				{% if gui_auth_enabled %}
-				<form method="post" action="{% url 'logout' %}" style="display:inline">{% csrf_token %}<button class="cn-donate" type="submit" style="cursor:pointer">Logout</button></form>
-				{% endif %}
-				<a class="cn-donate" href="https://www.paypal.com/donate/?hosted_button_id=UXTWMT8P6HE2C" target="_blank" rel="noopener">Donate</a>
-			</div>
 		</header>
+		<div class="cn-scrim" id="cn-scrim" hidden></div>
 
-		{% comment %}
-			App-update banner (not the "Update binaries" panel in Settings, which
-			checks ffmpeg/flux/velora against AstraeLabs/Binary -- this one checks
-			the app itself against AstraeLabs/VibraVid's latest GitHub release).
-			Hidden by default; JS below shows it only when GET api/version/check/
-			reports update_available. Global shell, so it shows on every page.
-		{% endcomment %}
 		<div class="cn-upd-banner" id="cn-upd" hidden role="status">
 			<span id="cn-upd-text"></span>
 			<div class="cn-upd-actions">
-				<button type="button" class="cn-cta" id="cn-upd-go">Update now</button>
+				<button type="button" class="cn-cta is-sm" id="cn-upd-go">Update now</button>
 				<a id="cn-upd-view" href="#" target="_blank" rel="noopener" class="cn-donate">Release notes</a>
-				<button type="button" class="cn-upd-x" id="cn-upd-dismiss" aria-label="Dismiss">&times;</button>
+				<button type="button" class="cn-upd-x" id="cn-upd-dismiss" aria-label="Dismiss"><svg class="cn-ico is-sm" aria-hidden="true"><use href="#i-x"/></svg></button>
 			</div>
 		</div>
 
-		<main id="cn-main">
+		<main id="cn-main" class="cn-main" tabindex="-1">
 			{% block content %}{% endblock %}
 		</main>
 
 		<script>
 			(function () {
-				var bar = document.getElementById("cn-top");
-				if (!bar.classList.contains("is-float")) return;
-				var onScroll = function () {
-					bar.classList.toggle("is-float", window.scrollY < 8);
-				};
-				addEventListener("scroll", onScroll, { passive: true });
-				onScroll();
+				"use strict";
+				var top = document.getElementById("cn-top");
+				var more = document.getElementById("cn-more-btn");
+				var panel = document.getElementById("cn-nav2");
+				var scrim = document.getElementById("cn-scrim");
+
+				function setMore(open, restoreFocus) {
+					top.classList.toggle("is-more", open);
+					more.setAttribute("aria-expanded", String(open));
+					scrim.hidden = !open;
+					if (open) {
+						var first = panel.querySelector("a, button, select");
+						if (first) first.focus({ preventScroll: true });
+					} else if (restoreFocus) {
+						more.focus({ preventScroll: true });
+					}
+				}
+				more.addEventListener("click", function () { setMore(!top.classList.contains("is-more"), true); });
+				scrim.addEventListener("click", function () { setMore(false, true); });
+				document.addEventListener("keydown", function (e) {
+					if (e.key === "Escape" && top.classList.contains("is-more")) setMore(false, true);
+				});
+				matchMedia("(min-width: 1024px)").addEventListener("change", function (e) { if (e.matches) setMore(false); });
+
+				var badge = document.getElementById("cn-nav-active");
+				var URL_SUMMARY = "{% url 'get_downloads_summary' %}";
+				function refreshBadge() {
+					if (document.hidden) return;
+					fetch(URL_SUMMARY).then(function (r) { return r.ok ? r.json() : null; }).then(function (data) {
+						if (!data) return;
+						var n = parseInt(data.active, 10) || 0;
+						badge.textContent = n;
+						badge.hidden = n === 0;
+					}).catch(function () {});
+				}
+				if (!document.getElementById("cn-reel-active")) {
+					setInterval(refreshBadge, 15000);
+					document.addEventListener("visibilitychange", refreshBadge);
+				}
 			})();
 		</script>
 
@@ -125,28 +140,31 @@
 				var view   = document.getElementById("cn-upd-view");
 				var dismiss = document.getElementById("cn-upd-dismiss");
 
+				function dismissed(version) {
+					try { return sessionStorage.getItem(DISMISS_KEY) === version; } catch (_) { return false; }
+				}
+
 				fetch(URL_CHECK).then(function (r) { return r.json(); }).then(function (info) {
-					if (!info || !info.update_available) return;
-					// One dismissal per version per tab -- reappears next
-					// session, or immediately for a newer release.
-					if (sessionStorage.getItem(DISMISS_KEY) === info.latest) return;
+					if (!info || !info.update_available || dismissed(info.latest)) return;
 					text.textContent = "A new version is available: v" + info.latest + " (you're on v" + info.current + ")";
 					view.href = info.html_url || "#";
+					banner.dataset.version = info.latest;
 					banner.hidden = false;
-				}).catch(function () { /* offline/GitHub unreachable -- fail silent, not an error worth surfacing */ });
+				}).catch(function () {});
 
 				dismiss.addEventListener("click", function () {
-					var m = text.textContent.match(/v([\d.]+)/);
-					if (m) sessionStorage.setItem(DISMISS_KEY, m[1]);
+					try { sessionStorage.setItem(DISMISS_KEY, banner.dataset.version || ""); } catch (_) {}
 					banner.hidden = true;
 				});
 
 				goBtn.addEventListener("click", function () {
 					goBtn.disabled = true;
+					goBtn.setAttribute("aria-busy", "true");
 					goBtn.textContent = "Updating…";
 					fetch(URL_UPDATE, { method: "POST", headers: { "X-CSRFToken": CSRF } })
 						.then(function (r) { return r.json(); })
 						.then(function (res) {
+							goBtn.removeAttribute("aria-busy");
 							if (res.success) {
 								text.textContent = res.message || "Update started.";
 								goBtn.hidden = true;
@@ -157,6 +175,7 @@
 							}
 						})
 						.catch(function () {
+							goBtn.removeAttribute("aria-busy");
 							goBtn.disabled = false;
 							goBtn.textContent = "Update now";
 							text.textContent = "Update request failed.";
@@ -165,23 +184,23 @@
 			})();
 		</script>
 
-        {{ audio_language_config|json_script:"cn-audio-config" }}
-        <script src="{% static 'searchapp/audio_languages.js' %}?v={{ app_version }}&audio_ui=2"></script>
-        <script src="{% static 'searchapp/quality.js' %}"
-                data-quality-url="{% url 'available_qualities' %}"
-                data-download-url="{% url 'start_download' %}"
-                data-watchlist-url="{% url 'add_to_watchlist' %}"></script>
-        <script src="{% static 'searchapp/watchlist_picker.js' %}"
-                data-watchlist-url="{% url 'add_to_watchlist' %}"
-                data-metadata-url="{% url 'series_metadata' %}"></script>
-        <script src="{% static 'scheduleapp/schedule.js' %}"
-                data-css="{% static 'scheduleapp/schedule.css' %}"
-                data-csrf="{{ csrf_token }}"
-                data-download-url="{% url 'start_download' %}"
-                data-queue-url="{% url 'download_dashboard' %}"
-                data-add-url="{% url 'schedule_add' %}"
-                data-list-url="{% url 'schedule_list' %}"
-                data-update-url="{% url 'schedule_update' %}"></script>
+		{{ audio_language_config|json_script:"cn-audio-config" }}
+		<script src="{% static 'searchapp/audio_languages.js' %}?v={{ app_version }}&audio_ui=2"></script>
+		<script src="{% static 'searchapp/quality.js' %}?v={{ app_version }}"
+		        data-quality-url="{% url 'available_qualities' %}"
+		        data-download-url="{% url 'start_download' %}"
+		        data-watchlist-url="{% url 'add_to_watchlist' %}"></script>
+		<script src="{% static 'searchapp/watchlist_picker.js' %}?v={{ app_version }}"
+		        data-watchlist-url="{% url 'add_to_watchlist' %}"
+		        data-metadata-url="{% url 'series_metadata' %}"></script>
+		<script src="{% static 'scheduleapp/schedule.js' %}?v={{ app_version }}"
+		        data-css="{% static 'scheduleapp/schedule.css' %}?v={{ app_version }}"
+		        data-csrf="{{ csrf_token }}"
+		        data-download-url="{% url 'start_download' %}"
+		        data-queue-url="{% url 'download_dashboard' %}"
+		        data-add-url="{% url 'schedule_add' %}"
+		        data-list-url="{% url 'schedule_list' %}"
+		        data-update-url="{% url 'schedule_update' %}"></script>
 		{% block scripts %}{% endblock %}
 	</body>
 </html>

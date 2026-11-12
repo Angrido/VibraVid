@@ -60,7 +60,7 @@ def search(request: HttpRequest) -> HttpResponse:
                 "selected_site": site,
                 "is_global": True,
                 "tmdb_available": bool(tmdb_client.api_key),
-                "nav_active": "cerca",
+                "nav_active": "search",
             },
         )
 
@@ -85,7 +85,7 @@ def search(request: HttpRequest) -> HttpResponse:
             "results": results,
             "selected_site": site,
             "tmdb_available": bool(tmdb_client.api_key),
-            "nav_active": "cerca",
+            "nav_active": "search",
         },
     )
 

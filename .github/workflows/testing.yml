@@ -42,3 +42,22 @@ jobs:
       
       - name: Run tests
         run: python -m pytest -q
+
+  e2e:
+    name: Run GUI e2e (desktop and phone)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r GUI/requirements.txt pytest playwright
+
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run e2e tests
+        run: python -m pytest -q Test/e2e

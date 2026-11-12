@@ -3,7 +3,7 @@
 {% block title %}Logs — VibraVid{% endblock %}
 
 {% block content %}
-<div class="cn-pad" style="padding-top:34px">
+<div class="cn-pad">
 
 	<div class="cn-page-hd">
 		<h1 class="cn-blast">Logs</h1>
@@ -11,28 +11,29 @@
 	</div>
 
 	<div class="cn-duo">
-		<div class="cn-box">
-			<h3>App logs <span class="cn-sp"></span><span class="cn-st is-done" id="cn-logs-count">0</span>
-                <button type="button" class="cn-mini" data-clear-logs="logs" hidden>Clear App logs</button>
-            </h3>
-			<div class="cn-lines" id="cn-logs-list-logs" style="gap:2px;max-height:380px;overflow-y:auto"></div>
-		</div>
-
-		<div class="cn-box">
-			<h3>ARR logs <span class="cn-sp"></span><span class="cn-st is-done" id="cn-logs-arr-count">0</span>
-                <button type="button" class="cn-mini" data-clear-logs="arr" hidden>Clear ARR logs</button>
-            </h3>
-			<div class="cn-lines" id="cn-logs-list-arr" style="gap:2px;max-height:380px;overflow-y:auto"></div>
-		</div>
+		<section class="cn-box" aria-labelledby="cn-h-app-logs">
+			<h3 id="cn-h-app-logs">App logs <span class="cn-st is-type cn-num" id="cn-logs-count">0</span>
+				<span class="cn-sp"></span>
+				<button type="button" class="cn-cta is-ghost is-sm" data-clear-logs="logs" hidden>Clear App logs</button>
+			</h3>
+			<div class="cn-lines is-compact" id="cn-logs-list-logs" aria-busy="true"><div class="cn-skel" aria-hidden="true"></div></div>
+		</section>
+		<section class="cn-box" aria-labelledby="cn-h-arr-logs">
+			<h3 id="cn-h-arr-logs">ARR logs <span class="cn-st is-type cn-num" id="cn-logs-arr-count">0</span>
+				<span class="cn-sp"></span>
+				<button type="button" class="cn-cta is-ghost is-sm" data-clear-logs="arr" hidden>Clear ARR logs</button>
+			</h3>
+			<div class="cn-lines is-compact" id="cn-logs-list-arr" aria-busy="true"><div class="cn-skel" aria-hidden="true"></div></div>
+		</section>
 	</div>
 
 	<form id="cn-logs-csrf" hidden>{% csrf_token %}</form>
-    <p id="cn-logs-feedback" role="status"></p>
-	<div class="cn-box" style="margin-top:20px">
-		<h3 id="cn-logs-current">Select a log file</h3>
-		<pre class="cn-area" id="cn-logs-content" style="max-height:460px;overflow:auto;white-space:pre-wrap"></pre>
-	</div>
+	<p class="cn-note" id="cn-logs-feedback" role="status"></p>
 
+	<section class="cn-box cn-log-view" aria-labelledby="cn-logs-current">
+		<h3 id="cn-logs-current" tabindex="-1">Select a log file</h3>
+		<pre class="cn-area" id="cn-logs-content" tabindex="0" aria-labelledby="cn-logs-current"></pre>
+	</section>
 </div>
 {% endblock %}
 
@@ -87,28 +88,27 @@
 	function renderLogList(containerId, category, files) {
 		var container = el(containerId);
 		container.innerHTML = "";
+		container.removeAttribute("aria-busy");
 		if (!files.length) {
-			container.innerHTML = '<p class="cn-empty" style="padding:14px 0">No log files found.</p>';
+			container.innerHTML = '<p class="cn-empty">No log files found.</p>';
 			return;
 		}
 		files.forEach(function (f) {
-			var row = document.createElement("div");
-			row.className = "cn-ln";
-			row.style.background = "var(--cn-surf-2)";
-			row.style.padding = "9px 13px";
-			row.style.cursor = "pointer";
+			var row = document.createElement("button");
+			row.type = "button";
+			row.className = "cn-ln is-flat";
+			row.dataset.log = category + "/" + f.name;
 
 			var label = document.createElement("span");
 			label.className = "cn-grow";
-			var t = document.createElement("span");
-			t.className = "cn-t";
-			t.style.fontSize = "13px";
-			t.textContent = f.name;
-			var s = document.createElement("span");
-			s.className = "cn-s";
-			s.textContent = fmtTime(f.mtime) + " · " + fmtSize(f.size);
-			label.appendChild(t);
-			label.appendChild(s);
+			var title = document.createElement("span");
+			title.className = "cn-t";
+			title.textContent = f.name;
+			var meta = document.createElement("span");
+			meta.className = "cn-s";
+			meta.textContent = fmtTime(f.mtime) + " · " + fmtSize(f.size);
+			label.appendChild(title);
+			label.appendChild(meta);
 
 			row.appendChild(label);
 			row.addEventListener("click", function () { loadLogContent(category, f.name); });
@@ -137,6 +137,12 @@
 	function loadLogContent(category, name) {
         selectedCategory = category;
         var generation = ++contentGeneration;
+		document.querySelectorAll("[data-log]").forEach(function (row) {
+			row.setAttribute("aria-current", String(row.dataset.log === category + "/" + name));
+		});
+		if (!matchMedia("(min-width: 1024px)").matches) {
+			logsCurrentTitle.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+		}
 		logsCurrentTitle.textContent = "Loading " + name + "…";
 		fetch(URL_LOGS_CONTENT + "?category=" + encodeURIComponent(category) + "&name=" + encodeURIComponent(name))
 			.then(function (r) { return r.json(); })

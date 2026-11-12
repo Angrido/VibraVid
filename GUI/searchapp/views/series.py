@@ -159,7 +159,7 @@ def series_detail(request: HttpRequest) -> HttpResponse:
                 "series": series_info,
                 "seasons": seasons_data,
                 "tmdb_available": bool(tmdb_client.api_key),
-                "nav_active": "cerca",
+                "nav_active": "search",
             }
         )
 

@@ -7,7 +7,7 @@
 {% block title %}Settings — VibraVid{% endblock %}
 
 {% block content %}
-<div class="cn-pad" style="padding-top:34px">
+<div class="cn-pad">
 
 	<div class="cn-page-hd">
 		<h1 class="cn-blast">Settings</h1>
@@ -22,49 +22,48 @@
 		</div>
 		<div class="cn-big"><span class="cn-v">{{ queued }}</span><span class="cn-k">Queued</span></div>
 		<div class="cn-big">
-			<span class="cn-v" style="font-size:19px;font-weight:800">{{ app_version }}</span>
+			<span class="cn-v is-text">{{ app_version }}</span>
 			<span class="cn-k">Version</span>
 		</div>
-		<span style="margin-left:auto;display:flex;gap:11px;flex-wrap:wrap">
-			<a class="cn-cta" href="{% url 'arr_stack' %}">ARR Queue</a>
+		<span class="cn-slab-acts">
+			<a class="cn-cta is-ghost" href="{% url 'arr_stack' %}">ARR Queue</a>
 			<a class="cn-cta is-ghost" href="{% url 'arr_missing' %}">Missing from library</a>
 		</span>
 	</div>
 
-	<p class="cn-sub" id="cn-deps-warn" role="alert" hidden
-		style="color:var(--cn-hot);font-size:13px;margin:0 0 16px;padding:12px 15px;border:1px solid var(--cn-hot);border-radius:var(--cn-radius-sm)"></p>
+	<p class="cn-msg is-bad" id="cn-deps-warn" role="alert" hidden></p>
 
-	<div class="cn-switch" id="cn-tabs">
-		<button type="button" data-tab="view"   aria-selected="true">Overview</button>
-		<button type="button" data-tab="config" aria-selected="false">config.toml</button>
-		<button type="button" data-tab="login"  aria-selected="false">login.toml</button>
-		<button type="button" data-tab="arr"    aria-selected="false">ARR</button>
-		<button type="button" data-tab="plug"   aria-selected="false">Extensions</button>
+	<div class="cn-switch" id="cn-tabs" role="tablist" aria-label="Settings sections">
+		<button type="button" role="tab" id="cn-tab-view" aria-controls="cn-panel-view" data-tab="view" aria-selected="true">Overview</button>
+		<button type="button" role="tab" id="cn-tab-config" aria-controls="cn-panel-config" data-tab="config" aria-selected="false" tabindex="-1">config.toml</button>
+		<button type="button" role="tab" id="cn-tab-login" aria-controls="cn-panel-login" data-tab="login" aria-selected="false" tabindex="-1">login.toml</button>
+		<button type="button" role="tab" id="cn-tab-arr" aria-controls="cn-panel-arr" data-tab="arr" aria-selected="false" tabindex="-1">ARR</button>
+		<button type="button" role="tab" id="cn-tab-plug" aria-controls="cn-panel-plug" data-tab="plug" aria-selected="false" tabindex="-1">Extensions</button>
 	</div>
 
 	{# ── QUADRO ─────────────────────────────────────────────────────────── #}
-	<section class="cn-panel" data-panel="view">
+	<section class="cn-panel" role="tabpanel" id="cn-panel-view" aria-labelledby="cn-tab-view" data-panel="view">
 		<div class="cn-duo">
 			<div class="cn-box">
 				<h3>Providers <span class="cn-sp"></span><span class="cn-st is-done">{{ providers|length }}</span></h3>
-				<div class="cn-row" style="margin:0 0 12px;gap:10px;align-items:center">
-					<p class="cn-sub" id="cn-site-summary" role="status" aria-live="polite" style="flex:1;margin:0">Checking which sites are reachable…</p>
-					<button class="cn-cta is-ghost" type="button" id="cn-site-check">Check again</button>
+				<div class="cn-row cn-box-note">
+					<p class="cn-note cn-grow" id="cn-site-summary" role="status" aria-live="polite">Checking which sites are reachable…</p>
+					<button class="cn-cta is-ghost is-sm" type="button" id="cn-site-check"><svg class="cn-ico is-sm" aria-hidden="true"><use href="#i-refresh"/></svg>Check again</button>
 				</div>
-				<div class="cn-lines" id="cn-site-list" style="gap:2px;max-height:340px;overflow-y:auto">
+				<div class="cn-lines is-compact" id="cn-site-list">
 					{% for p in providers %}
-						<div class="cn-ln" data-site="{{ p.name }}"{% if p.url %} data-site-checkable{% endif %} style="background:var(--cn-surf-2);padding:11px 15px">
-							<span class="cn-grow" style="min-width:0">
-								<span class="cn-t" style="font-size:14px">{{ p.name }}</span>
-								<span class="cn-s" style="overflow-wrap:anywhere">
-									{% if p.url %}<a href="{{ p.url }}" target="_blank" rel="noopener noreferrer" style="color:inherit">{{ p.host }}</a>{% else %}No public URL{% endif %}{% if p.category %} · {{ p.category }}{% endif %}
+						<div class="cn-ln is-flat" data-site="{{ p.name }}"{% if p.url %} data-site-checkable{% endif %}>
+							<span class="cn-grow">
+								<span class="cn-t">{{ p.name }}</span>
+								<span class="cn-s">
+									{% if p.url %}<a href="{{ p.url }}" target="_blank" rel="noopener noreferrer">{{ p.host }}</a>{% else %}No public URL{% endif %}{% if p.category %} · {{ p.category }}{% endif %}
 								</span>
 								<span class="cn-s" data-site-note hidden></span>
 							</span>
 							<span class="cn-st is-wait" data-site-badge>{% if p.url %}Checking{% else %}No URL{% endif %}</span>
 						</div>
 					{% empty %}
-						<p class="cn-empty" style="padding:14px 0">No providers loaded.</p>
+						<p class="cn-empty">No providers loaded.</p>
 					{% endfor %}
 				</div>
 			</div>
@@ -72,7 +71,7 @@
 			{% if disabled_sites %}
 			<div class="cn-box">
 				<h3>Hidden services</h3>
-				<p style="margin:0;color:var(--cn-mute);font-size:13px;line-height:1.8">
+				<p class="cn-note">
 					{% for d in disabled_sites %}<code>{{ d }}</code>{% if not forloop.last %} · {% endif %}{% endfor %}
 				</p>
 			</div>
@@ -91,7 +90,7 @@
 						<dt>Overseerr</dt><dd>{% if arr.seerr %}webhook active{% else %}not configured{% endif %}</dd>
 					</dl>
 				{% else %}
-					<p style="margin:0;color:var(--cn-mute);font-size:13.5px">
+					<p class="cn-note">
 						Sonarr, Radarr and Overseerr can send their requests here.
 						Enable it from the ARR tab.
 					</p>
@@ -100,39 +99,40 @@
 
 			<div class="cn-box">
 				<h3>Custom CLI options <span class="cn-sp"></span><span class="cn-st is-done" id="cn-extra-args-count">{{ site_extra_args|length }}</span></h3>
-				<p class="cn-sub" style="margin:0 0 12px">
+				<p class="cn-box-note">
 					Extra CLI flags applied automatically to every future download for a
 					provider (e.g. Prime Video's <code>--optimize-audio</code>).
 				</p>
-				<div class="cn-lines" id="cn-extra-args-list" style="gap:2px;max-height:220px;overflow-y:auto"></div>
+				<div class="cn-lines is-compact" id="cn-extra-args-list"></div>
 				{% if cli_option_providers %}
-					<div class="cn-row" style="margin-top:12px;gap:8px">
-						<select id="cn-extra-args-site" class="cn-mini" style="flex:1;min-width:0">
+					<div class="cn-field cn-box-sep">
+						<label for="cn-extra-args-site">Provider</label>
+						<select id="cn-extra-args-site" class="cn-mini">
 							{% for p in cli_option_providers %}<option value="{{ p.name }}">{{ p.name }}</option>{% endfor %}
 						</select>
 					</div>
-					<div id="cn-extra-args-fields" style="margin-top:8px"></div>
-					<div class="cn-row" style="margin-top:12px;gap:8px">
-						<button class="cn-cta is-ghost" type="button" id="cn-extra-args-add">Add</button>
+					<div id="cn-extra-args-fields" class="cn-set-grid"></div>
+					<div class="cn-row">
+						<button class="cn-cta is-ghost is-sm" type="button" id="cn-extra-args-add"><svg class="cn-ico is-sm" aria-hidden="true"><use href="#i-plus"/></svg>Add</button>
 					</div>
 				{% else %}
-					<p class="cn-empty" style="padding:14px 0">No providers with custom CLI options available.</p>
+					<p class="cn-empty">No providers with custom CLI options available.</p>
 				{% endif %}
-				<p class="cn-sub" id="cn-extra-args-msg" style="margin-top:8px"></p>
+				<p class="cn-note" id="cn-extra-args-msg" role="status"></p>
 			</div>
 		</div>
 	</section>
 
 	{# ── config.toml ─────────────────────────────────────────────────────── #}
-	<section class="cn-panel" data-panel="config" hidden>
+	<section class="cn-panel" role="tabpanel" id="cn-panel-config" aria-labelledby="cn-tab-config" data-panel="config" hidden>
 		<p class="cn-msg">
 			The raw file, comments included. Saved only if it's valid TOML, and the previous copy
 			stays in <code>config.toml.backup</code>.
 		</p>
 		<textarea class="cn-area" id="cn-config" spellcheck="false"
 		          aria-label="config.toml content"></textarea>
-		<div class="cn-row" style="margin-top:15px">
-			<p class="cn-sub" id="cn-config-msg" style="flex:1"></p>
+		<div class="cn-row cn-savebar">
+			<p class="cn-note cn-grow" id="cn-config-msg" role="status"></p>
 			<button class="cn-cta is-ghost" type="button" data-reset="config">Discard changes</button>
 			<button class="cn-cta is-ghost" type="button" data-reload="config">Reload config</button>
 			<button class="cn-cta" type="button" data-save="config">Save config.toml</button>
@@ -140,14 +140,14 @@
 	</section>
 
 	{# ── login.toml ──────────────────────────────────────────────────────── #}
-	<section class="cn-panel" data-panel="login" hidden>
+	<section class="cn-panel" role="tabpanel" id="cn-panel-login" aria-labelledby="cn-tab-login" data-panel="login" hidden>
 		<p class="cn-msg">
 			Provider credentials. The raw file, saved only if it's valid TOML.
 		</p>
 		<textarea class="cn-area" id="cn-login" spellcheck="false"
 		          aria-label="login.toml content"></textarea>
-		<div class="cn-row" style="margin-top:15px">
-			<p class="cn-sub" id="cn-login-msg" style="flex:1"></p>
+		<div class="cn-row cn-savebar">
+			<p class="cn-note cn-grow" id="cn-login-msg" role="status"></p>
 			<button class="cn-cta is-ghost" type="button" data-reset="login">Discard changes</button>
 			<button class="cn-cta is-ghost" type="button" data-reload="login">Reload login</button>
 			<button class="cn-cta" type="button" data-save="login">Save login.toml</button>
@@ -155,19 +155,19 @@
 	</section>
 
 	{# ── ARR ─────────────────────────────────────────────────────────────── #}
-	<section class="cn-panel" data-panel="arr" hidden>
-		<div class="cn-slab" style="margin-bottom:22px">
+	<section class="cn-panel" role="tabpanel" id="cn-panel-arr" aria-labelledby="cn-tab-arr" data-panel="arr" hidden>
+		<div class="cn-slab">
 			<span class="cn-sysdot is-idle" id="cn-arr-dot"><i></i><span id="cn-arr-state">Reading status…</span></span>
-			<span style="margin-left:auto">
-				<button class="cn-cta is-ghost" type="button" id="cn-arr-sync">Sync now</button>
+			<span class="cn-slab-acts">
+				<button class="cn-cta is-ghost" type="button" id="cn-arr-sync"><svg class="cn-ico is-sm" aria-hidden="true"><use href="#i-refresh"/></svg>Sync now</button>
 			</span>
 		</div>
 
 		<div class="cn-duo">
 			<div class="cn-box">
-				<fieldset class="cn-set" style="margin:0">
+				<fieldset class="cn-set">
 					<legend>What's on</legend>
-					<div style="display:grid;gap:11px">
+					<div class="cn-set-grid">
 						<label class="cn-check"><input type="checkbox" id="arr-enabled"><span>ARR services</span></label>
 						<div>
 							<label class="cn-check"><input type="checkbox" role="switch" id="arr-auto" aria-describedby="arr-auto-hint"><span>Automatic downloads</span></label>
@@ -185,7 +185,7 @@
 			</div>
 
 			<div class="cn-box">
-				<fieldset class="cn-set" style="margin:0">
+				<fieldset class="cn-set">
 					<legend>Timing and limits</legend>
 					<div class="cn-formgrid">
 						<label class="cn-field"><span>Interval (s)</span>
@@ -203,7 +203,7 @@
 			</div>
 
 			<div class="cn-box">
-				<fieldset class="cn-set" style="margin:0">
+				<fieldset class="cn-set">
 					<legend>Sonarr</legend>
 					<div class="cn-formgrid">
 						<label class="cn-field"><span>URL</span>
@@ -213,12 +213,12 @@
 						<label class="cn-field"><span>Webhook secret</span>
 							<input class="cn-input" type="password" id="arr-sonarr-webhook-secret" placeholder="X-Webhook-Token"></label>
 					</div>
-					<p class="cn-sub" style="margin-top:11px">POST /api/arr/webhook/sonarr/</p>
+					<p class="cn-note cn-mono">POST /api/arr/webhook/sonarr/</p>
 				</fieldset>
 			</div>
 
 			<div class="cn-box">
-				<fieldset class="cn-set" style="margin:0">
+				<fieldset class="cn-set">
 					<legend>Radarr</legend>
 					<div class="cn-formgrid">
 						<label class="cn-field"><span>URL</span>
@@ -228,22 +228,22 @@
 						<label class="cn-field"><span>Webhook secret</span>
 							<input class="cn-input" type="password" id="arr-radarr-webhook-secret" placeholder="X-Webhook-Token"></label>
 					</div>
-					<p class="cn-sub" style="margin-top:11px">POST /api/arr/webhook/radarr/</p>
+					<p class="cn-note cn-mono">POST /api/arr/webhook/radarr/</p>
 				</fieldset>
 			</div>
 
 			<div class="cn-box">
-				<fieldset class="cn-set" style="margin:0">
+				<fieldset class="cn-set">
 					<legend>Seerr</legend>
 					<label class="cn-field"><span>Webhook secret</span>
 						<input class="cn-input" type="password" id="arr-webhook-secret" placeholder="X-Webhook-Token"></label>
-					<p class="cn-sub" style="margin-top:11px">POST /api/arr/webhook/seerr/</p>
+					<p class="cn-note cn-mono">POST /api/arr/webhook/seerr/</p>
 				</fieldset>
 			</div>
 
 			<div class="cn-box">
 				<h3>Latest test webhooks</h3>
-				<dl class="cn-kv" style="grid-template-columns:1fr">
+				<dl class="cn-kv is-stack">
 					<dt>Seerr</dt><dd><pre class="cn-pre" id="cn-arr-test-seerr">no test yet</pre></dd>
 					<dt>Sonarr</dt><dd><pre class="cn-pre" id="cn-arr-test-sonarr">no test yet</pre></dd>
 					<dt>Radarr</dt><dd><pre class="cn-pre" id="cn-arr-test-radarr">no test yet</pre></dd>
@@ -251,8 +251,8 @@
 			</div>
 		</div>
 
-		<div class="cn-row" style="margin-top:20px">
-			<p class="cn-sub" id="cn-arr-msg" style="flex:1"></p>
+		<div class="cn-row cn-savebar">
+			<p class="cn-note cn-grow" id="cn-arr-msg" role="status"></p>
 			<button class="cn-cta is-ghost" type="button" id="cn-arr-reset">Discard changes</button>
 			<button class="cn-cta" type="button" id="cn-arr-save">Save ARR</button>
 		</div>
@@ -264,76 +264,77 @@
 	</section>
 
 	{# ── ESTENSIONI ──────────────────────────────────────────────────────── #}
-	<section class="cn-panel" data-panel="plug" hidden>
+	<section class="cn-panel" role="tabpanel" id="cn-panel-plug" aria-labelledby="cn-tab-plug" data-panel="plug" hidden>
 		<div class="cn-duo">
 			<div class="cn-box">
 				<h3>Add a provider</h3>
 				{% if not service_upload_allowed %}
-				<p class="cn-sub" role="note" style="margin-bottom:15px;color:var(--cn-gold)">
+				<p class="cn-warnbox" role="note">
 					Disabled: installing provider code runs arbitrary code on the server. Set <code>VIBRAVID_ALLOW_SERVICE_UPLOAD=1</code> to enable it
 					(this also unlocks editing <code>[HOOKS]</code> and <code>imp_service</code> from this page).
 				</p>
 				{% endif %}
-				<p class="cn-sub" style="margin-bottom:15px">
+				<p class="cn-box-note">
 					A ZIP containing the service folder
 					(<code>Spotify/__init__.py</code>, <code>downloader.py</code>, <code>scrapper.py</code>).
 					It also needs the stub in <code>GUI/searchapp/api/</code>, which the plugin brings with it.
 				</p>
 
-				<div class="cn-drop" id="cn-drop" role="button" tabindex="0">
+				<div class="cn-drop" id="cn-drop" role="button" tabindex="0" aria-describedby="cn-drop-size">
+					<svg class="cn-ico is-lg" aria-hidden="true"><use href="#i-upload"/></svg>
 					<input type="file" id="cn-zip" accept=".zip" hidden>
 					<b id="cn-drop-name">Drop the ZIP here</b>
 					<span id="cn-drop-size">or click to choose one</span>
 				</div>
 
-				<div class="cn-row" style="margin-top:15px">
-					<p class="cn-sub" id="cn-zip-msg" style="flex:1"></p>
+				<div class="cn-row cn-savebar">
+					<p class="cn-note cn-grow" id="cn-zip-msg" role="status"></p>
 					<button class="cn-cta" type="button" id="cn-zip-go" disabled>Install</button>
 				</div>
 
 				<div id="cn-zip-out" hidden></div>
 
-				<h3 style="margin-top:24px">Uploaded providers</h3>
-				<p class="cn-sub" style="margin-bottom:10px">
+				<h3 class="cn-box-sep">Uploaded providers</h3>
+				<p class="cn-box-note">
 					Providers added from a ZIP can be removed here. The ones shipped with the app can't.
 				</p>
-				<div class="cn-lines" id="cn-uploaded" style="gap:2px">
+				<div class="cn-lines is-compact" id="cn-uploaded">
 					{% for name in uploaded_services %}
-						<div class="cn-ln" data-uploaded-row="{{ name }}" style="background:var(--cn-surf-2);padding:11px 15px">
-							<span class="cn-grow"><span class="cn-t" style="font-size:14px">{{ name }}</span></span>
-							<button class="cn-cta" type="button" data-remove="{{ name }}">Remove</button>
+						<div class="cn-ln is-flat" data-uploaded-row="{{ name }}">
+							<span class="cn-grow"><span class="cn-t">{{ name }}</span></span>
+							<button class="cn-cta is-danger is-sm" type="button" data-remove="{{ name }}">Remove</button>
 						</div>
 					{% endfor %}
 				</div>
-				<p class="cn-sub" id="cn-uploaded-empty" {% if uploaded_services %}hidden{% endif %}>None uploaded yet.</p>
-				<p class="cn-sub" id="cn-remove-msg"></p>
+				<p class="cn-note" id="cn-uploaded-empty" {% if uploaded_services %}hidden{% endif %}>None uploaded yet.</p>
+				<p class="cn-note" id="cn-remove-msg" role="status"></p>
 			</div>
 
 			<div class="cn-box">
 				<h3>Binaries</h3>
-				<p class="cn-sub" style="margin-bottom:15px">
+				<p class="cn-box-note">
 					FFmpeg, Flux, dovi_tool, MKVToolNix and Velora don't go
 					through the app update: they're checked against AstraeLabs/Binary and
 					re-downloaded from here if outdated.
 				</p>
-				<div class="cn-lines" id="cn-deps" style="gap:2px;margin-bottom:15px" aria-live="polite">
-					<p class="cn-sub">Checking installed tools…</p>
+				<div class="cn-lines is-compact cn-box-note" id="cn-deps" aria-live="polite">
+					<div class="cn-skel" aria-hidden="true"></div><p class="cn-sr">Checking installed tools…</p>
 				</div>
 				<div class="cn-row">
-					<p class="cn-sub" id="cn-binaries-msg" style="flex:1"></p>
-					<button class="cn-cta" type="button" id="cn-binaries">Update binaries</button>
+					<p class="cn-note cn-grow" id="cn-binaries-msg" role="status"></p>
+					<button class="cn-cta is-ghost" type="button" id="cn-binaries">Update binaries</button>
 				</div>
 			</div>
 
 			<div class="cn-box">
 				<h3>External services</h3>
-				<p class="cn-sub" style="margin-bottom:15px">
+				<p class="cn-box-note">
 					Git repositories listed in <code>imp_service</code> are checked at every start and a newer
 					commit is downloaded in the background. Refresh here to apply it now, without a restart.
 				</p>
 				<div class="cn-row">
-					<p class="cn-sub" id="cn-import-msg" style="flex:1"></p>
-					<button class="cn-cta" type="button" id="cn-import">Refresh external import</button>
+					<p class="cn-note cn-grow" id="cn-import-msg" role="status"></p>
+					<button class="cn-cta is-ghost" type="button" id="cn-import">Refresh external import</button>
 				</div>
 			</div>
 		</div>
@@ -380,9 +381,8 @@
 	}
 	function say(node, text, kind) {
 		node.textContent = text || "";
-		node.style.color = kind === "good" ? "var(--cn-go)"
-			: kind === "bad" ? "var(--cn-hot)"
-			: "var(--cn-mute)";
+		node.classList.toggle("is-good", kind === "good");
+		node.classList.toggle("is-bad", kind === "bad");
 	}
 
 	var SITE_BADGES = {
@@ -409,7 +409,6 @@
 		link.href = info.final_url;
 		link.target = "_blank";
 		link.rel = "noopener noreferrer";
-		link.style.color = "var(--cn-amber)";
 		link.textContent = info.final_host;
 		note.append(link);
 	}
@@ -451,16 +450,33 @@
 
 	// ── schede ──────────────────────────────────────────────────────────────
 	var tabs = el("cn-tabs");
-	tabs.addEventListener("click", function (e) {
-		var b = e.target.closest("button[data-tab]");
-		if (!b) return;
-		tabs.querySelectorAll("button").forEach(function (x) {
+	var tabButtons = Array.prototype.slice.call(tabs.querySelectorAll("button[data-tab]"));
+	function selectTab(b, focus) {
+		tabButtons.forEach(function (x) {
 			x.setAttribute("aria-selected", String(x === b));
+			x.tabIndex = x === b ? 0 : -1;
 		});
 		document.querySelectorAll(".cn-panel").forEach(function (p) {
 			p.hidden = p.dataset.panel !== b.dataset.tab;
 		});
+		if (focus) b.focus();
+		b.scrollIntoView({ block: "nearest", inline: "nearest" });
+		history.replaceState(null, "", b.dataset.tab === "view" ? location.pathname : "#" + b.dataset.tab);
+	}
+	tabs.addEventListener("click", function (e) {
+		var b = e.target.closest("button[data-tab]");
+		if (b) selectTab(b);
 	});
+	tabs.addEventListener("keydown", function (e) {
+		var i = tabButtons.indexOf(document.activeElement);
+		if (i < 0) return;
+		var next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabButtons.length - 1 }[e.key];
+		if (next === undefined) return;
+		e.preventDefault();
+		selectTab(tabButtons[(next + tabButtons.length) % tabButtons.length], true);
+	});
+	var linked = tabButtons.filter(function (b) { return "#" + b.dataset.tab === location.hash; })[0];
+	if (linked) selectTab(linked);
 
 	// ── i due file grezzi ───────────────────────────────────────────────────
 	function source(id) { return JSON.parse(el(id).textContent); }
@@ -673,19 +689,15 @@
 		if (!extraArgsFields) return;
 		extraArgsFields.innerHTML = "";
 		if (!schema.length) {
-			extraArgsFields.innerHTML = '<p class="cn-empty" style="padding:6px 0">No custom options available for this provider.</p>';
+			extraArgsFields.innerHTML = '<p class="cn-note">No custom options available for this provider.</p>';
 			return;
 		}
 		schema.forEach(function (arg) {
 			var row = document.createElement("div");
-			row.className = "cn-row";
-			row.style.gap = "8px";
-			row.style.marginBottom = "6px";
+			row.className = "cn-row cn-arg-row";
 
-			var label = document.createElement("span");
-			label.className = "cn-s";
-			label.style.flex = "1";
-			label.style.minWidth = "0";
+			var label = document.createElement("label");
+			label.className = "cn-arg-flag";
 			label.title = arg.help || "";
 			label.textContent = arg.flag;
 
@@ -697,7 +709,6 @@
 			} else if (arg.kind === "choice") {
 				control = document.createElement("select");
 				control.className = "cn-mini";
-				control.style.flex = "2";
 				var empty = document.createElement("option");
 				empty.value = "";
 				empty.textContent = "(unset)";
@@ -713,12 +724,12 @@
 				control = document.createElement("input");
 				control.type = arg.kind === "int" ? "number" : "text";
 				control.className = "cn-mini";
-				control.style.flex = "2";
-				control.style.minWidth = "0";
 				if (arg.default !== null && arg.default !== undefined && arg.default !== false) {
 					control.placeholder = String(arg.default);
 				}
 			}
+			control.id = "cn-arg-" + arg.flag.replace(/[^a-z0-9]/gi, "");
+			label.htmlFor = control.id;
 			control.dataset.flag = arg.flag;
 			control.dataset.kind = arg.kind;
 
@@ -732,7 +743,7 @@
 		if (!extraArgsFields) return;
 		if (!site) { renderExtraArgsFields([]); return; }
 		if (extraArgsSchemaCache[site]) { renderExtraArgsFields(extraArgsSchemaCache[site]); return; }
-		extraArgsFields.innerHTML = '<p class="cn-empty" style="padding:6px 0">Loading…</p>';
+		extraArgsFields.innerHTML = '<p class="cn-note">Loading…</p>';
 		fetch(URL_CLI_OPTIONS + "?site=" + encodeURIComponent(site))
 			.then(function (r) { return r.json(); })
 			.then(function (data) {
@@ -741,7 +752,7 @@
 				renderExtraArgsFields(schema);
 			})
 			.catch(function () {
-				extraArgsFields.innerHTML = '<p class="cn-empty" style="padding:6px 0">Could not load options for this provider.</p>';
+				extraArgsFields.innerHTML = '<p class="cn-note is-bad">Could not load options for this provider.</p>';
 			});
 	}
 
@@ -755,22 +766,19 @@
 		el("cn-extra-args-count").textContent = keys.length;
 
 		if (!keys.length) {
-			extraArgsList.innerHTML = '<p class="cn-empty" style="padding:10px 0">No custom options configured.</p>';
+			extraArgsList.innerHTML = '<p class="cn-note">No custom options configured.</p>';
 			return;
 		}
 
 		extraArgsList.innerHTML = "";
 		keys.forEach(function (site) {
 			var row = document.createElement("div");
-			row.className = "cn-ln";
-			row.style.background = "var(--cn-surf-2)";
-			row.style.padding = "9px 13px";
+			row.className = "cn-ln is-flat";
 
 			var label = document.createElement("span");
 			label.className = "cn-grow";
 			var t = document.createElement("span");
 			t.className = "cn-t";
-			t.style.fontSize = "14px";
 			t.textContent = site;
 			var s = document.createElement("span");
 			s.className = "cn-s";
@@ -779,12 +787,12 @@
 			label.appendChild(s);
 
 			var removeBtn = document.createElement("button");
-			removeBtn.className = "cn-cta is-ghost cn-round";
+			removeBtn.className = "cn-mini is-icon";
 			removeBtn.type = "button";
 			removeBtn.title = "Remove";
 			removeBtn.setAttribute("aria-label", "Remove");
 			removeBtn.dataset.removeExtraArgs = site;
-			removeBtn.textContent = "×";
+			removeBtn.innerHTML = '<svg class="cn-ico is-sm" aria-hidden="true"><use href="#i-x"/></svg>';
 
 			row.appendChild(label);
 			row.appendChild(removeBtn);
@@ -951,18 +959,14 @@
 	// ── Binaries ──────────────────────────────────────────────────────────────
 	function depRow(dep) {
 		var row = document.createElement("div");
-		row.className = "cn-ln";
-		row.style.cssText = "background:var(--cn-surf-2);padding:11px 15px;gap:12px";
+		row.className = "cn-ln is-flat";
 		var grow = document.createElement("span");
 		grow.className = "cn-grow";
-		grow.style.minWidth = "0";
 		var name = document.createElement("span");
 		name.className = "cn-t";
-		name.style.fontSize = "14px";
 		name.textContent = dep.name + (dep.version ? " " + dep.version : "");
 		var where = document.createElement("span");
-		where.className = "cn-sub";
-		where.style.cssText = "display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+		where.className = "cn-s cn-ln-path";
 		where.textContent = dep.path || (dep.required ? t("Required, not found") : t("Optional, not installed"));
 		if (dep.path) where.title = dep.path;
 		grow.appendChild(name);
@@ -991,7 +995,7 @@
 			})
 			.catch(function () {
 				var note = document.createElement("p");
-				note.className = "cn-sub";
+				note.className = "cn-note is-bad";
 				note.textContent = t("Could not check the installed tools.");
 				list.replaceChildren(note);
 			});

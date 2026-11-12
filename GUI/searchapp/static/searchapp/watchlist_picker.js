@@ -16,13 +16,13 @@
         if (active) return;
         active = true;
         const dialog = document.createElement("dialog");
-        dialog.style.cssText = "background:var(--cn-surf);color:var(--cn-white);border:1px solid var(--cn-edge-2);border-radius:var(--cn-radius);padding:24px;width:min(440px,90vw)";
+        dialog.className = "cn-dialog";
         dialog.setAttribute("aria-labelledby", "cn-watch-picker-title");
-        dialog.innerHTML = '<h2 id="cn-watch-picker-title">Add to watchlist</h2><p class="watch-title"></p>' +
-            '<label>What would you like to monitor?<select style="display:block;width:100%;margin:16px 0;padding:10px" aria-label="Seasons to add"><option value="all">Entire series, including new seasons</option></select></label>' +
-            '<label>Quality<select class="watch-quality" style="display:block;width:100%;margin:16px 0;padding:10px" aria-label="Desired video quality"></select></label>' +
-            '<p role="status">Loading available seasons...</p><div style="display:flex;justify-content:flex-end;gap:12px">' +
-            '<button type="button" class="cn-mini watch-cancel">Cancel</button><button type="button" class="cn-mini watch-add" disabled>Add</button></div>';
+        dialog.innerHTML = '<h2 id="cn-watch-picker-title">Add to watchlist</h2><p class="watch-title cn-cap"></p>' +
+            '<label>What would you like to monitor?<select class="cn-mini" aria-label="Seasons to add"><option value="all">Entire series, including new seasons</option></select></label>' +
+            '<label>Quality<select class="watch-quality cn-mini" aria-label="Desired video quality"></select></label>' +
+            '<p role="status">Loading available seasons...</p><div class="cn-dialog-actions">' +
+            '<button type="button" class="cn-mini watch-cancel">Cancel</button><button type="button" class="cn-mini is-mark watch-add" disabled>Add</button></div>';
         dialog.querySelector(".watch-title").textContent = item.name;
         const select = dialog.querySelector("select");
         const quality = dialog.querySelector(".watch-quality");
