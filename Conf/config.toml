@@ -76,7 +76,7 @@ live_max_empty_polls = 8
 # Links that expire during the download are refreshed up to this many rounds
 max_token_refresh_rounds = 10
 token_refresh_backoff_seconds = 4.0
-token_refresh_stall_rounds = 3
+token_refresh_stall_rounds = 5
 embed_poster = false
 # Write .nfo and poster next to the video (Jellyfin/Emby/Kodi)
 write_sidecars = false

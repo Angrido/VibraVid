@@ -228,7 +228,7 @@ extract_embedded_cc = false
 live_max_empty_polls = 8
 max_token_refresh_rounds = 10
 token_refresh_backoff_seconds = 4.0
-token_refresh_stall_rounds = 3
+token_refresh_stall_rounds = 5
 embed_poster = false
 write_sidecars = false
 cleanup_tmp_folder = true
@@ -256,8 +256,8 @@ temp_root = ""
 | `segment_delay_jitter_seconds` | `0` | Random 0..N seconds added on top of the delay |
 | `live_max_empty_polls` | `8` | Live HLS/DASH: consecutive polls without new segments (or failures) before the stream is considered ended |
 | `max_token_refresh_rounds` | `10` | Retry rounds when segments fail mid-download (expired token -> 403, transient 503): fresh manifest/token, retry only failed segments |
-| `token_refresh_backoff_seconds` | `4.0` | Wait = `backoff x round`, capped at 20s |
-| `token_refresh_stall_rounds` | `3` | Give up after this many consecutive rounds without progress |
+| `token_refresh_backoff_seconds` | `4.0` | Wait doubles every round (`4, 8, 16, 32, 60...`), capped at 60s, so a CDN that refuses connections for a couple of minutes is ridden out |
+| `token_refresh_stall_rounds` | `5` | Give up after this many consecutive rounds without progress |
 
 ### Stream selection filters
 

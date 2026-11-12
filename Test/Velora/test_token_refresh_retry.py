@@ -7,7 +7,7 @@ from pathlib import Path
 workspace_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(workspace_root))
 
-from VibraVid.core.velora.util._stream_helpers import build_retry_segments
+from VibraVid.core.velora.util._stream_helpers import build_retry_segments, token_refresh_backoff
 
 _results = {"pass": 0, "fail": 0}
 
@@ -63,11 +63,24 @@ def test_original_segment_dict_is_not_mutated():
     check("source segment keeps its URL", segs[1]["url"], "https://cdn/seg1.ts?token=old")
 
 
+def test_backoff_doubles_each_round_to_outlast_a_refusing_cdn():
+    waits = [token_refresh_backoff(4.0, r) for r in range(1, 6)]
+
+    assert waits == [4.0, 8.0, 16.0, 32.0, 60.0]
+    assert sum(waits) >= 120.0
+
+
+def test_backoff_is_capped():
+    assert token_refresh_backoff(4.0, 10) == 60.0
+
+
 if __name__ == "__main__":
     test_no_fresh_urls_retries_original_urls()
     test_fresh_urls_replace_original_urls()
     test_partial_fresh_map_mixes_fresh_and_original()
     test_unknown_segment_number_is_ignored()
     test_original_segment_dict_is_not_mutated()
+    test_backoff_doubles_each_round_to_outlast_a_refusing_cdn()
+    test_backoff_is_capped()
     print(f"\n{_results['pass']} passed, {_results['fail']} failed")
     sys.exit(1 if _results["fail"] else 0)
