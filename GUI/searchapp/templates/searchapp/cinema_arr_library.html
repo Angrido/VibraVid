@@ -23,7 +23,7 @@
 			<a class="cn-cta" href="{% url 'settings_editor' %}">Open settings</a>
 		</div>
 	{% else %}
-		<div class="cn-slab am-slab">
+		<div class="cn-slab am-slab" id="lib-stats">
 			<div class="cn-big"><span class="cn-v">{{ series|length }}</span><span class="cn-k">Series</span></div>
 			<div class="cn-big"><span class="cn-v">{{ movies|length }}</span><span class="cn-k">Movies</span></div>
 			<div class="cn-big"><span class="cn-v{% if missing_episodes %} is-hot{% endif %}">{{ missing_episodes }}</span><span class="cn-k">Missing episodes</span></div>
@@ -57,7 +57,7 @@
 		</section>
 
 		{% for label in unreachable %}
-			<p class="cn-msg is-bad" role="alert">{{ label }} did not answer, so its titles are not listed. Check that it is running and that the API key is right.</p>
+			<p class="cn-msg is-bad" role="alert">{% if label in unauthorized %}{{ label }} rejected the API key, so its titles are not listed. Copy the key again from {{ label }} and save it in the ARR settings.{% else %}{{ label }} did not answer, so its titles are not listed. Check that it is running and that its URL in the ARR settings is right.{% endif %}</p>
 		{% endfor %}
 
 		{% if series or movies %}
@@ -74,15 +74,25 @@
 						{% if movies %}<button class="cn-opt" type="button" data-lib-kind="movies" aria-pressed="false">Movies<span class="cn-opt-n">{{ movies|length }}</span></button>{% endif %}
 					</div>
 				</div>
+				<div class="cn-fgroup">
+					<label class="cn-tag" for="lib-sort">Sort by</label>
+					<select class="cn-mini" id="lib-sort">
+						<option value="title">Title</option>
+						<option value="missing">Most missing</option>
+						<option value="added">Recently added</option>
+						<option value="size">Size on disk</option>
+					</select>
+				</div>
 				<button class="cn-opt lib-only" type="button" id="lib-missing" aria-pressed="false">Only with missing</button>
 				<button class="cn-opt lib-only" type="button" id="lib-italian" aria-pressed="false">Only with Italian audio</button>
+				<button class="cn-opt lib-only" type="button" id="lib-busy" aria-pressed="false">In progress</button>
 			</div>
 
 			{% if series %}
 				<section class="am-group lib-group" data-lib-group="series" aria-labelledby="lib-series-h">
 					<div class="cn-strip-hd am-group-hd">
 						<h2 id="lib-series-h">Series</h2>
-						<span class="cn-n">{{ series|length }} series · {{ missing_episodes }} missing episodes</span>
+						<span class="cn-n" id="lib-series-n">{{ series|length }} series · {{ missing_episodes }} missing episodes</span>
 					</div>
 					<div class="lib-grid">
 						{% for card in series %}{% include "searchapp/_arr_library_tile.html" %}{% endfor %}
@@ -94,7 +104,7 @@
 				<section class="am-group lib-group" data-lib-group="movies" aria-labelledby="lib-movies-h">
 					<div class="cn-strip-hd am-group-hd">
 						<h2 id="lib-movies-h">Movies</h2>
-						<span class="cn-n">{{ movies|length }} movies · {{ missing_movies }} missing</span>
+						<span class="cn-n" id="lib-movies-n">{{ movies|length }} movies · {{ missing_movies }} missing</span>
 					</div>
 					<div class="lib-grid">
 						{% for card in movies %}{% include "searchapp/_arr_library_tile.html" %}{% endfor %}
@@ -114,7 +124,9 @@
 {% endblock %}
 
 {% block scripts %}
+{{ activity|json_script:"lib-activity" }}
 <script src="{% static 'searchapp/arr_library.js' %}?v={{ app_version }}"
+        data-activity-url="{% url 'arr_library_activity' %}"
         data-check-url="{% url 'arr_language_check_start' %}"
         data-status-url="{% url 'arr_language_check_status' %}"
         data-interval-url="{% url 'arr_language_check_interval' %}"

@@ -717,7 +717,8 @@ def _reconcile_orphaned_downloads(older_than_seconds: int | None = None) -> int:
         queue_entry.success = False
         queue_entry.save(update_fields=["completed_at", "success"])
         queue_entry.media_request.status = ArrMediaRequest.Status.FAILED
-        queue_entry.media_request.save(update_fields=["status"])
+        queue_entry.media_request.last_error = "interrupted"
+        queue_entry.media_request.save(update_fields=["status", "last_error"])
         recovered += 1
 
     if recovered:
@@ -1429,6 +1430,7 @@ def _mark_failed(item: dict, error: str, season_num=None, ep_num=None):
             
             queue_entry.save(update_fields=["completed_at", "success", "attempts"])
             queue_entry.media_request.status = status
-            queue_entry.media_request.save(update_fields=["status"])
+            queue_entry.media_request.last_error = error if error in ArrMediaRequest.FAILURE_REASONS else "download_failed"
+            queue_entry.media_request.save(update_fields=["status", "last_error"])
     except Exception as exc:
         logger.error(f"Failed to mark failed {key}: {exc}")

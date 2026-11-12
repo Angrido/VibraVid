@@ -35,16 +35,22 @@ def _not_found():
     return requests.HTTPError(response=response)
 
 
+def _rejected_key():
+    response = requests.Response()
+    response.status_code = 401
+    return requests.HTTPError(response=response)
+
+
 class FakeSonarr:
     label = "Sonarr"
     down = False
 
     def get_series(self):
         if self.down:
-            raise requests.ConnectionError("refused")
+            raise self.down if isinstance(self.down, Exception) else requests.ConnectionError("refused")
         return [
-            {"id": 7, "title": "Zeta Show", "year": 2020, "monitored": True, "images": [POSTER],
-             "statistics": {"episodeCount": 4, "episodeFileCount": 1, "seasonCount": 2}},
+            {"id": 7, "title": "Zeta Show", "year": 2020, "monitored": True, "images": [POSTER], "added": "2024-05-01T10:00:00Z",
+             "statistics": {"episodeCount": 4, "episodeFileCount": 1, "seasonCount": 2, "sizeOnDisk": 2048}},
             {"id": 8, "title": "alpha Done", "monitored": True, "statistics": {"episodeCount": 2, "episodeFileCount": 2}},
             {"id": 9, "title": "Muted", "monitored": False, "statistics": {"episodeCount": 3, "episodeFileCount": 0}},
         ]
@@ -101,8 +107,11 @@ def client():
     return Client(HTTP_HOST="localhost")
 
 
-def _queue(dedup_key, status):
-    request = ArrMediaRequest.objects.create(arr_id=1, arr_source="sonarr", title="x", content_type="serie", status=status)
+def _queue(dedup_key, status, last_error=""):
+    source, arr_id = dedup_key.split("_")[:2]
+    request = ArrMediaRequest.objects.create(
+        arr_id=int(arr_id), arr_source=source, title="x", content_type="serie", status=status, last_error=last_error,
+    )
     ArrProcessingQueue.objects.create(dedup_key=dedup_key, media_request=request)
 
 
@@ -209,3 +218,86 @@ def test_title_pages_trust_sonarr_and_radarr_over_an_old_queue_state(arr):
     assert (episodes[701]["state"], episodes[701]["queue"]) == ("complete", "")
     assert episodes[702]["queue"] == "import_pending"
     assert library_service.movie_detail(32)["item"]["queue"] == ""
+
+
+def test_library_tells_a_rejected_api_key_from_a_server_that_does_not_answer(client, arr):
+    arr["sonarr"].down = _rejected_key()
+
+    library = library_service.scan_library()
+    page = client.get("/arr/").content.decode()
+
+    assert library["unreachable"] == ["Sonarr"] and library["unauthorized"] == ["Sonarr"]
+    assert len(library["movies"]) == 3
+    assert "Sonarr rejected the API key" in page and "did not answer" not in page
+
+
+def test_library_tiles_carry_what_sorting_needs(client, arr):
+    page = client.get("/arr/").content.decode()
+
+    assert 'data-added="2024-05-01T10:00:00Z" data-size="2048"' in page
+    assert 'id="lib-sort"' in page and 'value="added"' in page
+
+
+def test_activity_counts_what_is_downloading_queued_and_failed_for_each_title(arr):
+    _queue("sonarr_7_s1_e2", ArrMediaRequest.Status.DOWNLOADING)
+    _queue("sonarr_7_s1_e3", ArrMediaRequest.Status.PENDING)
+    _queue("sonarr_7_s1_e4", ArrMediaRequest.Status.PENDING)
+    _queue("radarr_31", ArrMediaRequest.Status.FAILED)
+    _queue("radarr_33", ArrMediaRequest.Status.IMPORT_PENDING)
+    _queue("radarr_32", ArrMediaRequest.Status.COMPLETED)
+    _queue("sonarr_8_s1_e1", ArrMediaRequest.Status.SKIPPED)
+
+    assert library_service.title_activity() == {
+        "serie:7": {"downloading": 1, "queued": 2},
+        "movie:31": {"failed": 1},
+    }
+
+
+def test_library_page_and_its_endpoint_share_the_activity_the_tiles_show(client, arr):
+    _queue("radarr_31", ArrMediaRequest.Status.DOWNLOADING)
+
+    page = client.get("/arr/").content.decode()
+    live = client.get("/api/arr/library/activity/").json()
+
+    assert '<script id="lib-activity" type="application/json">{"movie:31": {"downloading": 1}}</script>' in page
+    assert 'data-activity-url="/api/arr/library/activity/"' in page and "data-lib-activity" in page
+    assert live == {"status": "ok", "titles": {"movie:31": {"downloading": 1}}}
+
+
+def test_series_page_marks_each_row_for_live_updates_and_keeps_a_busy_episode_pickable_later(client, arr):
+    _queue("sonarr_7_s1_e3", ArrMediaRequest.Status.DOWNLOADING)
+
+    page = " ".join(client.get("/arr/series/7/").content.decode().split())
+
+    assert 'data-am-key="sonarr_7_s1_e2" data-am-state=""' in page
+    assert 'data-am-key="sonarr_7_s1_e3" data-am-state="downloading"' in page
+    assert 'data-am-key="sonarr_7_s1_e1"' not in page
+    assert 'data-am-episode="703" disabled' in page and 'data-am-episode="702" >' in page
+    assert 'data-states-url="/api/arr/missing/states/"' in page
+
+
+def test_movie_page_marks_its_row_for_live_updates(client, arr):
+    page = client.get("/arr/movie/31/").content.decode()
+
+    assert 'data-am-key="radarr_31" data-am-state=""' in page
+    assert 'data-states-url="/api/arr/missing/states/"' in page
+
+
+def test_movie_that_cannot_be_downloaded_now_has_no_checkbox_for_a_live_update_to_enable(client, arr):
+    _queue("radarr_33", ArrMediaRequest.Status.DOWNLOADING)
+
+    page = client.get("/arr/movie/33/").content.decode()
+
+    assert 'data-am-key="radarr_33" data-am-state="downloading"' in page
+    assert "data-am-movie" not in page
+
+
+def test_title_pages_explain_why_the_last_try_failed(client, arr):
+    _queue("sonarr_7_s1_e2", ArrMediaRequest.Status.FAILED, "season_not_available")
+    _queue("radarr_31", ArrMediaRequest.Status.FAILED)
+
+    episodes = {e["id"]: e for season in library_service.series_detail(7)["seasons"] for e in season["episodes"]}
+
+    assert episodes[702]["reason"] == "The provider does not have this season." and episodes[702]["selectable"]
+    assert "The provider does not have this season." in client.get("/arr/series/7/").content.decode()
+    assert "The download did not complete. Details are in the logs." in client.get("/arr/movie/31/").content.decode()

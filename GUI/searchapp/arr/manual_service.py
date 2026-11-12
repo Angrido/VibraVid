@@ -24,6 +24,7 @@ logger = logging.getLogger("ARR")
 
 MANUAL_SOURCE = "manual_resync"
 AWAITING_IMPORT_STATES = ("completed", "import_pending")
+NOT_QUEUED = {"state": "", "reason": ""}
 
 
 class ArrNotConfigured(Exception):
@@ -40,11 +41,14 @@ def _missing_items(cfg: dict, sonarr, radarr) -> list[dict]:
     return processor.get_missing_items()
 
 
-def _queue_states(keys: list[str]) -> dict[str, str]:
+def _queue_states(keys: list[str]) -> dict[str, dict[str, str]]:
     from searchapp.models import ArrProcessingQueue
 
     entries = ArrProcessingQueue.objects.filter(dedup_key__in=keys).select_related("media_request")
-    return {entry.dedup_key: entry.media_request.status for entry in entries}
+    return {
+        entry.dedup_key: {"state": entry.media_request.status, "reason": entry.media_request.failure_reason}
+        for entry in entries
+    }
 
 
 def _keys_with_file(keys: list[str]) -> set[str]:
@@ -67,9 +71,9 @@ def _keys_with_file(keys: list[str]) -> set[str]:
     return found
 
 
-def live_queue_states(keys: list[str]) -> dict[str, str]:
+def live_queue_states(keys: list[str]) -> dict[str, dict[str, str]]:
     states = _queue_states(keys)
-    awaiting = [key for key, state in states.items() if state in AWAITING_IMPORT_STATES]
+    awaiting = [key for key, entry in states.items() if entry["state"] in AWAITING_IMPORT_STATES]
     if not awaiting:
         return states
     try:
@@ -77,14 +81,15 @@ def live_queue_states(keys: list[str]) -> dict[str, str]:
     except requests.RequestException as exc:
         logger.warning(f"Could not ask Sonarr/Radarr whether downloads were imported: {exc}")
         return states
-    return {key: "imported" if key in imported else state for key, state in states.items()}
+    return {key: {**entry, "state": "imported"} if key in imported else entry for key, entry in states.items()}
 
 
 def scan_missing() -> dict[str, Any]:
     cfg = _load_arr_config()
     sonarr, radarr = _build_clients(cfg)
     clients = [client for client in (sonarr, radarr) if client]
-    reachable = {client.label for client in clients if client.is_available()}
+    problems = {client.label: client.connection_problem() for client in clients}
+    reachable = {label for label, problem in problems.items() if not problem}
     items = (
         _missing_items(
             cfg,
@@ -110,11 +115,12 @@ def scan_missing() -> dict[str, Any]:
             serie["episode_count"] += len(season["episodes"])
     states = _queue_states([row["queue_key"] for row in rows])
     for row in rows:
-        row["state"] = states.get(row["queue_key"], "")
+        row.update(states.get(row["queue_key"], NOT_QUEUED))
 
     return {
         "configured": bool(clients),
-        "unreachable": [client.label for client in clients if client.label not in reachable],
+        "unreachable": [label for label, problem in problems.items() if problem],
+        "unauthorized": [label for label, problem in problems.items() if problem == "unauthorized"],
         "polling_active": bool(cfg.get("enabled") and cfg.get("enable_polling") and automatic_downloads_enabled(cfg)),
         "series": series,
         "movies": movies,
