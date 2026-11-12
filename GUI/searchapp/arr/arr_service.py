@@ -613,6 +613,9 @@ def trigger_polling_sync(full_resync: bool = False, manual: bool = False) -> int
     cfg = _load_arr_config()
     if not cfg.get("enabled"):
         return 0
+    if not automatic_downloads_enabled(cfg):
+        logger.info("Automatic downloads are off, ARR sync skipped")
+        return 0
 
     sonarr, radarr = _build_clients(cfg)
     if not sonarr and not radarr:

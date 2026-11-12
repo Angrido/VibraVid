@@ -63,3 +63,30 @@ def test_auto_download_can_be_set_from_the_environment(monkeypatch, value, expec
     monkeypatch.setenv("ARR_AUTO_DOWNLOAD", value)
 
     assert arr_service.automatic_downloads_enabled(arr_service._load_arr_config()) is expected
+
+
+def test_sync_now_downloads_nothing_when_automatic_downloads_are_off(monkeypatch):
+    monkeypatch.setattr(arr_service, "_load_arr_config", lambda: {"enabled": True, "auto_download": False})
+
+    def fail_if_called(_cfg):
+        raise AssertionError("ARR clients must not be built when automatic downloads are off")
+
+    monkeypatch.setattr(arr_service, "_build_clients", fail_if_called)
+
+    assert arr_service.trigger_polling_sync(full_resync=True, manual=True) == 0
+
+
+def test_sync_now_endpoint_refuses_when_automatic_downloads_are_off(monkeypatch):
+    from django.test import RequestFactory
+
+    from searchapp.views import arr as arr_views
+
+    monkeypatch.setattr(arr_service, "_load_arr_config", lambda: {"enabled": True, "auto_download": False})
+    monkeypatch.setattr(
+        arr_service, "trigger_polling_sync", lambda **kwargs: pytest.fail("sync must not start")
+    )
+
+    response = arr_views.arr_trigger_sync(RequestFactory().post("/api/arr/trigger-sync/"))
+
+    assert response.status_code == 200
+    assert b'"status": "disabled"' in response.content

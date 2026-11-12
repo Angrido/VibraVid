@@ -39,7 +39,9 @@
 				<span class="cn-st is-wait">Manual downloads only</span>
 			{% endif %}
 			<a class="cn-cta is-ghost" href="{% url 'arr_missing' %}">Missing from library</a>
-			<button class="cn-cta" type="button" id="cn-arr-sync">Sync now</button>
+			{% if auto_download %}
+				<button class="cn-cta" type="button" id="cn-arr-sync">Sync now</button>
+			{% endif %}
 		</span>
 	</div>
 
@@ -181,7 +183,7 @@
 		msg.className = "cn-msg" + (kind ? " is-" + kind : "");
 	}
 
-	btn.addEventListener("click", function () {
+	if (btn) btn.addEventListener("click", function () {
 		btn.disabled = true;
 		say("Sync started…");
 
