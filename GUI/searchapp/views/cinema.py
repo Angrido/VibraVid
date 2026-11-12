@@ -12,6 +12,7 @@ from .. import services_admin
 from .._download_infra import _get_scheduled_downloads
 from .._library_paths import titleize_name
 from ..models import WatchlistItem
+from ..site_reachability import site_host, site_url
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +159,8 @@ def cinema_system(request: HttpRequest) -> HttpResponse:
     categories = get_site_categories()
     providers = []
     for name in sorted(get_available_sites()):
-        providers.append({"name": name, "category": categories.get(name, "")})
+        url = site_url(name)
+        providers.append({"name": name, "category": categories.get(name, ""), "url": url, "host": site_host(url)})
 
     cli_option_providers = []
     for p in providers:
