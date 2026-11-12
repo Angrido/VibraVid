@@ -100,3 +100,32 @@ def test_earliest_provider_result_wins_when_several_match(service, monkeypatch):
     payload = service._search_and_build_payload("Movie", "streamingcommunity", tmdb_id=1669841, media_type="movie")
 
     assert payload["name"] == "Movie 1"
+
+
+def test_movies_released_years_apart_skip_the_identity_lookup(service, monkeypatch):
+    looked_up = []
+    movies = [
+        Entries(id=1, name="K2 - L'ultima sfida", type="movie", year=1991),
+        Entries(id=2, name="L'ultima sfida", type="movie", year=2024),
+        Entries(id=3, name="L'ultima sfida", type="movie"),
+    ]
+    _use_provider(monkeypatch, FakeProvider(movies, lambda item: looked_up.append(item.id) or "7"))
+
+    payload = service._search_and_build_payload(
+        "L'ultima sfida", "streamingcommunity", tmdb_id=1443449, expected_year=2025, media_type="movie"
+    )
+
+    assert payload is None
+    assert looked_up == [2, 3]
+
+
+def test_locate_remembers_every_provider_it_searched(service, monkeypatch):
+    monkeypatch.setattr(service, "_provider_order", lambda primary: ["streamingcommunity", "raiplay"])
+    monkeypatch.setattr(service, "_resolve_request_tmdb_id", lambda item, media_type: 1590097)
+    monkeypatch.setattr(service, "_resolve_radarr_title", lambda title, movie_id, tmdb_id: [title])
+    _use_provider(monkeypatch, FakeProvider([]))
+
+    payload, _ = service.locate({"content_type": "movie", "id": 5, "title": "Afterlight", "year": 2025})
+
+    assert payload is None
+    assert service.searched_providers == ["streamingcommunity", "raiplay"]

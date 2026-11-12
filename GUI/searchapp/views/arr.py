@@ -670,6 +670,7 @@ def arr_missing_check(request: HttpRequest) -> JsonResponse:
                 return JsonResponse({"status": "ok", "found": False, "series_only": True, **series_only,
                                      "message": "Found only as a series, while Radarr lists it as a movie."})
             return JsonResponse({"status": "ok", "found": False, "provider": match["provider"],
+                                 "searched": match.get("searched", []),
                                  "message": "Not found on any configured provider."})
         item = Entries(**{k: v for k, v in payload.items() if k in Entries.__dataclass_fields__})
         try:

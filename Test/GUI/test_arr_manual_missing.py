@@ -222,11 +222,13 @@ def test_check_marks_the_audio_languages_you_want(client, monkeypatch):
 def test_check_reports_a_title_missing_from_every_provider(client, monkeypatch):
     monkeypatch.setattr(manual_service, "find_on_provider", lambda movie_id=None, episode_id=None: {
         "payload": None, "provider": "streamingcommunity", "season": 1, "episode": 2,
+        "searched": ["streamingcommunity", "raiplay"],
     })
 
     result = _post(client, "/api/arr/missing/check/", {"episode": 702}).json()
 
     assert result["found"] is False
+    assert result["searched"] == ["streamingcommunity", "raiplay"]
 
 
 def test_check_says_when_a_movie_exists_only_as_a_series(client, monkeypatch):

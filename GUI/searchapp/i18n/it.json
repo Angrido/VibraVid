@@ -476,6 +476,7 @@
   "Sonarr or Radarr took too long. Retry in a moment.": "Sonarr o Radarr ci hanno messo troppo. Riprova tra poco.",
   "wanted": "voluta",
   "Not found on any configured provider.": "Non trovato su nessun provider configurato.",
+  "Searched on:": "Cercato su:",
   "Found only as a series, while Radarr lists it as a movie.": "Trovato solo come serie, mentre Radarr lo considera un film.",
   "Match:": "Trovato:",
   "This provider cannot list audio before downloading. Your configured languages are still enforced when the download starts.": "Questo provider non può elencare l'audio prima del download. Le lingue configurate vengono comunque applicate all'avvio del download.",

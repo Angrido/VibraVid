@@ -164,6 +164,7 @@ def find_on_provider(movie_id: int | None = None, episode_id: int | None = None)
             "season": None,
             "episode": None,
             "series_only": None if payload else downloader.series_only_match,
+            "searched": downloader.searched_providers,
         }
 
     if not sonarr:
@@ -189,4 +190,5 @@ def find_on_provider(movie_id: int | None = None, episode_id: int | None = None)
         "season": season_num,
         "episode": local_episode if local_episode is not None else ep_num,
         "series_only": None,
+        "searched": downloader.searched_providers,
     }
