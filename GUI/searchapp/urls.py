@@ -74,6 +74,9 @@ urlpatterns = [
     path("arr-missing/", views.arr_missing, name="arr_missing"),
     path("api/arr/missing/download/", views.arr_missing_download, name="arr_missing_download"),
     path("api/arr/missing/check/", views.arr_missing_check, name="arr_missing_check"),
+    path("api/arr/language-check/", views.arr_language_check_start, name="arr_language_check_start"),
+    path("api/arr/language-check/status/", views.arr_language_check_status, name="arr_language_check_status"),
+    path("api/arr/language-check/interval/", views.arr_language_check_interval, name="arr_language_check_interval"),
 
     # In-app update
     path("api/version/check/", views.check_updates, name="check_updates"),
