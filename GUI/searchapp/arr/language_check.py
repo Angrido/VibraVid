@@ -53,16 +53,16 @@ def verdict_for(match_name: str, audio_supported: bool, codes: list[str]) -> str
     return ArrLanguageCheck.Verdict.ABSENT
 
 
-def record(media_key: str, title_key: str, verdict: str, codes: list[str], provider: str) -> None:
+def record(media_key: str, title_key: str, verdict: str, codes: list[str], provider: str, source_url: str = "") -> None:
     from ..models import ArrLanguageCheck
 
     ArrLanguageCheck.objects.update_or_create(
         media_key=media_key,
-        defaults={"title_key": title_key, "verdict": verdict, "languages": codes, "provider": provider or ""},
+        defaults={"title_key": title_key, "verdict": verdict, "languages": codes, "provider": provider or "", "source_url": source_url or ""},
     )
 
 
-def _check(movie_id: int | None = None, episode_id: int | None = None) -> tuple[str, list[str], str]:
+def _check(movie_id: int | None = None, episode_id: int | None = None) -> tuple[str, list[str], str, str]:
     from searchapp.api import get_api
     from searchapp.api.base import Entries
 
@@ -71,7 +71,7 @@ def _check(movie_id: int | None = None, episode_id: int | None = None) -> tuple[
     match = manual_service.find_on_provider(movie_id=movie_id, episode_id=episode_id)
     payload, provider = match["payload"], match["provider"] or ""
     if not payload:
-        return ArrLanguageCheck.Verdict.NOT_FOUND, [], provider
+        return ArrLanguageCheck.Verdict.NOT_FOUND, [], provider, ""
     item = Entries(**{k: v for k, v in payload.items() if k in Entries.__dataclass_fields__})
     try:
         languages = get_api(provider).get_available_audio_languages(item, match["season"], match["episode"])
@@ -79,7 +79,7 @@ def _check(movie_id: int | None = None, episode_id: int | None = None) -> tuple[
     except (NotImplementedError, AttributeError):
         languages, supported = [], False
     codes = [language.get("code", "") for language in languages]
-    return verdict_for(item.name or "", supported, codes), codes, provider
+    return verdict_for(item.name or "", supported, codes), codes, provider, match.get("url") or ""
 
 
 def _targets(movie_ids: set[int] | None, series_ids: set[int] | None) -> list[tuple[str, str, dict]]:
@@ -114,11 +114,11 @@ def _run(targets: list[tuple[str, str, dict]], prune_titles: set[str] | None) ->
     try:
         for media_key, title_key, ids in targets:
             try:
-                verdict, codes, provider = _check(**ids)
+                verdict, codes, provider, source_url = _check(**ids)
             except Exception as exc:
                 logger.warning("[language check] %s could not be checked: %s", media_key, exc)
-                verdict, codes, provider = ArrLanguageCheck.Verdict.FAILED, [], ""
-            record(media_key, title_key, verdict, codes, provider)
+                verdict, codes, provider, source_url = ArrLanguageCheck.Verdict.FAILED, [], "", ""
+            record(media_key, title_key, verdict, codes, provider, source_url)
             _progress["done"] += 1
         stale = ArrLanguageCheck.objects.exclude(media_key__in=[target[0] for target in targets])
         if prune_titles is not None:
@@ -174,9 +174,13 @@ def title_summaries() -> dict[str, dict[str, Any]]:
     from ..models import ArrLanguageCheck
 
     counts: dict[str, Counter] = defaultdict(Counter)
-    for title_key, verdict in ArrLanguageCheck.objects.values_list("title_key", "verdict"):
+    links: dict[str, dict[str, str]] = defaultdict(dict)
+    rows = ArrLanguageCheck.objects.order_by("media_key").values_list("title_key", "verdict", "provider", "source_url")
+    for title_key, verdict, provider, source_url in rows:
         counts[title_key][verdict] += 1
-    return {title_key: _summary(verdicts) for title_key, verdicts in counts.items()}
+        if source_url and not links[title_key]:
+            links[title_key] = {"url": source_url, "provider": provider}
+    return {title_key: {**_summary(verdicts), "source": links[title_key]} for title_key, verdicts in counts.items()}
 
 
 def interval_hours() -> int:

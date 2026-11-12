@@ -172,6 +172,24 @@ def start_selected_downloads(movie_ids: set[int], episode_ids: set[int]) -> dict
     return {"queued": len(jobs), "skipped": selected - len(jobs), "gone": len(movie_ids) + len(episode_ids) - selected}
 
 
+def provider_page_url(provider: str, payload: dict[str, Any] | None) -> str:
+    if not payload:
+        return ""
+    from VibraVid.utils import config_manager
+
+    try:
+        base = (config_manager.domain.get(provider, "full_url") or "").rstrip("/")
+    except (KeyError, AttributeError):
+        base = ""
+    slug = f"{payload.get('id')}-{payload.get('slug')}"
+    if provider == "streamingcommunity" and base and payload.get("id") and payload.get("slug"):
+        return f"{base}/{payload.get('provider_language') or 'it'}/titles/{slug}"
+    if provider == "animeunity" and base and payload.get("id") and payload.get("slug"):
+        return f"{base}/anime/{slug}"
+    url = str(payload.get("url") or "").strip()
+    return url if url.lower().startswith(("http://", "https://")) else ""
+
+
 def find_on_provider(movie_id: int | None = None, episode_id: int | None = None) -> dict[str, Any]:
     from .downloader_service import ArrDownloaderService
 
@@ -196,6 +214,7 @@ def find_on_provider(movie_id: int | None = None, episode_id: int | None = None)
         return {
             "payload": payload,
             "provider": provider,
+            "url": provider_page_url(provider, payload),
             "season": None,
             "episode": None,
             "series_only": None if payload else downloader.series_only_match,
@@ -222,6 +241,7 @@ def find_on_provider(movie_id: int | None = None, episode_id: int | None = None)
     return {
         "payload": payload,
         "provider": provider,
+        "url": provider_page_url(provider, payload),
         "season": season_num,
         "episode": local_episode if local_episode is not None else ep_num,
         "series_only": None,

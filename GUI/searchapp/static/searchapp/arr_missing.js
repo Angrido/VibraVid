@@ -197,6 +197,18 @@
         return item;
     }
 
+    function sourceLink(url, provider) {
+        if (!/^https?:\/\//i.test(url || "")) return null;
+        const link = document.createElement("a");
+        link.className = "am-src";
+        link.href = url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = tr("Open on the provider");
+        link.setAttribute("aria-label", tr("Open on the provider: {provider}").replace("{provider}", provider));
+        return link;
+    }
+
     function showReport(box, result) {
         box.replaceChildren();
         box.className = "am-result is-open";
@@ -233,6 +245,8 @@
         name.dataset.noTr = "";
         name.textContent = result.match + " · " + result.provider;
         source.append(tr("Match:") + " ", name);
+        const link = sourceLink(result.url, result.provider);
+        if (link) source.append(" ", link);
         if (!result.audio_supported) {
             box.classList.add("is-warn");
             line.textContent = tr("This provider cannot list audio before downloading. Your configured languages are still enforced when the download starts.");

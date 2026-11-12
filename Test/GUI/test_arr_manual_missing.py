@@ -205,6 +205,7 @@ def test_check_marks_the_audio_languages_you_want(client, monkeypatch):
 
     monkeypatch.setattr(manual_service, "find_on_provider", lambda movie_id=None, episode_id=None: {
         "payload": {"name": "Alpha Movie", "type": "movie", "id": 1}, "provider": "streamingcommunity", "season": None, "episode": None,
+        "url": "https://sc.example/it/titles/1-alpha",
     })
     monkeypatch.setattr("searchapp.api.get_api", lambda provider: object())
     monkeypatch.setattr(download_views, "track_report", lambda api, item, season, episode, description: {
@@ -216,6 +217,7 @@ def test_check_marks_the_audio_languages_you_want(client, monkeypatch):
     result = _post(client, "/api/arr/missing/check/", {"movie": 31}).json()
 
     assert result["found"] is True and result["match"] == "Alpha Movie"
+    assert result["url"] == "https://sc.example/it/titles/1-alpha"
     assert [(lang["code"], lang["wanted"]) for lang in result["audio_languages"]] == [("it", True), ("ja", False)]
 
 

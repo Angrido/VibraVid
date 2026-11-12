@@ -684,7 +684,7 @@ def _record_check(movie_id: int | None, match: dict, verdict: str, codes: list[s
         title_key, media_key = language_check.serie_key(match["series_id"]), language_check.episode_key(match["episode_id"])
     else:
         return
-    language_check.record(media_key, title_key, verdict, codes, match.get("provider") or "")
+    language_check.record(media_key, title_key, verdict, codes, match.get("provider") or "", match.get("url") or "")
 
 
 @require_http_methods(["POST"])
@@ -737,6 +737,7 @@ def arr_missing_check(request: HttpRequest) -> JsonResponse:
         "status": "ok",
         "found": True,
         "provider": match["provider"],
+        "url": match.get("url") or "",
         "match": item.name,
         "qualities": report["qualities"],
         "audio_supported": report["audio_supported"],

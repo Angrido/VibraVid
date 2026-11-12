@@ -134,7 +134,7 @@ def test_checking_all_missing_records_every_movie_and_episode_without_downloadin
     assert arr == []
     status = language_check.check_status()
     assert status["running"] is False and (status["done"], status["total"]) == (3, 3)
-    assert status["titles"]["serie:7"] == {"tone": "warn", "label": "Italian audio", "count": "1/2"}
+    assert status["titles"]["serie:7"] == {"tone": "warn", "label": "Italian audio", "count": "1/2", "source": {}}
     assert status["titles"]["movie:31"]["tone"] == "bad"
 
 
@@ -235,3 +235,41 @@ def test_single_language_check_from_a_title_page_updates_the_library_badge(clien
     client.post("/api/arr/missing/check/", data=json.dumps({"movie": 31}), content_type="application/json")
 
     assert language_check.title_summaries()["movie:31"]["tone"] == "good"
+
+
+@pytest.mark.parametrize(("provider", "payload", "url"), [
+    ("streamingcommunity", {"id": 12, "slug": "alpha-movie", "provider_language": "en"}, "https://sc.example/en/titles/12-alpha-movie"),
+    ("streamingcommunity", {"id": 12, "slug": "alpha-movie"}, "https://sc.example/it/titles/12-alpha-movie"),
+    ("animeunity", {"id": 5, "slug": "bleach"}, "https://au.example/anime/5-bleach"),
+    ("raiplay", {"url": "https://www.raiplay.it/programmi/alpha"}, "https://www.raiplay.it/programmi/alpha"),
+    ("raiplay", {"url": "javascript:alert(1)"}, ""),
+    ("raiplay", {"url": "/programmi/alpha"}, ""),
+    ("aurora", {"name": "Alpha"}, ""),
+    ("raiplay", None, ""),
+])
+def test_provider_page_url_points_to_the_title_on_the_provider(monkeypatch, provider, payload, url):
+    domains = {"streamingcommunity": "https://sc.example/", "animeunity": "https://au.example"}
+    monkeypatch.setattr("VibraVid.utils.config_manager.domain.get", lambda site, key: domains[site])
+    assert manual_service.provider_page_url(provider, payload) == url
+
+
+def test_check_remembers_the_provider_page_and_the_library_shows_it(arr, client, monkeypatch):
+    original = manual_service.find_on_provider
+    monkeypatch.setattr(manual_service, "find_on_provider", lambda movie_id=None, episode_id=None: {
+        **original(movie_id, episode_id), "url": "https://sc.example/it/titles/31-alpha",
+    })
+
+    assert language_check.start_check() is True
+
+    row = ArrLanguageCheck.objects.get(media_key="movie:31")
+    assert row.source_url == "https://sc.example/it/titles/31-alpha"
+    summary = language_check.title_summaries()["serie:7"]
+    assert summary["source"] == {"url": "https://sc.example/it/titles/31-alpha", "provider": "streamingcommunity"}
+    page = client.get("/arr/").content.decode()
+    assert 'href="https://sc.example/it/titles/31-alpha"' in page and 'rel="noopener noreferrer"' in page
+
+
+def test_title_without_a_provider_page_has_no_source(arr):
+    assert language_check.start_check() is True
+
+    assert language_check.title_summaries()["movie:31"]["source"] == {}
