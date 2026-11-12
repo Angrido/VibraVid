@@ -16,7 +16,7 @@
         if (active) return;
         active = true;
         const dialog = document.createElement("dialog");
-        dialog.style.cssText = "background:#17171f;color:#fff;border:1px solid #454550;border-radius:12px;padding:24px;width:min(440px,90vw)";
+        dialog.style.cssText = "background:var(--cn-surf);color:var(--cn-white);border:1px solid var(--cn-edge-2);border-radius:var(--cn-radius);padding:24px;width:min(440px,90vw)";
         dialog.setAttribute("aria-labelledby", "cn-watch-picker-title");
         dialog.innerHTML = '<h2 id="cn-watch-picker-title">Add to watchlist</h2><p class="watch-title"></p>' +
             '<label>What would you like to monitor?<select style="display:block;width:100%;margin:16px 0;padding:10px" aria-label="Seasons to add"><option value="all">Entire series, including new seasons</option></select></label>' +

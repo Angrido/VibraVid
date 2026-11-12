@@ -8,21 +8,26 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<meta name="theme-color" content="#0B0B10" />
+		<meta name="theme-color" content="#0D0C0A" />
 		<title>ARROWAR - Login</title>
 		<link rel="icon" type="image/png" href="{% static 'searchapp/img/favicon.png' %}" />
 		<link rel="stylesheet" href="{% static 'searchapp/cinema.css' %}" />
 		<style>
-			.cn-login { max-width: 380px; margin: 14vh auto 0; padding: 0 16px; }
-			.cn-login form { display: grid; gap: 16px; }
-			.cn-login .cn-error { color: var(--cn-hot); font-size: 14px; margin: 0; }
-			.cn-login-lang { position: fixed; top: 14px; right: 16px; }
+			.cn-login { max-width: 400px; margin: 0 auto; padding: 16vh 16px 48px; }
+			.cn-login .cn-wordmark { margin-bottom: 40px; animation: cn-rise var(--cn-t-slow) var(--cn-ease-out) both; }
+			.cn-login form { display: grid; gap: 18px; padding: 28px; animation: cn-rise var(--cn-t-slow) var(--cn-ease-out) 80ms both; }
+			.cn-login .cn-cta { margin-top: 6px; width: 100%; }
+			.cn-login .cn-error { color: var(--cn-hot-ink); font-size: 14px; margin: 0; padding: 10px 14px; border-radius: var(--cn-radius-sm); background: rgba(var(--cn-hot-a), .1); box-shadow: inset 3px 0 0 var(--cn-hot); }
+			.cn-login-lang { position: fixed; top: 14px; right: 16px; z-index: 2; }
+			.cn-login-glow { position: fixed; inset: auto -20vw -40vh auto; width: 80vw; height: 80vh; z-index: -1; pointer-events: none; background: radial-gradient(closest-side, rgba(var(--cn-hot-a), .18), transparent); }
 		</style>
 		{% include "searchapp/_i18n_boot.html" %}
 	</head>
 	<body class="cn">
 		<div class="cn-login-lang">{% include "searchapp/_lang_select.html" %}</div>
+		<div class="cn-login-glow" aria-hidden="true"></div>
 		<main class="cn-login">
+			<span class="cn-wordmark" aria-hidden="true">ARRO<i>WAR</i></span>
 			<div class="cn-page-hd"><h1>Sign in</h1></div>
 			<form class="cn-box" method="post" action="{% url 'login' %}">
 				{% csrf_token %}

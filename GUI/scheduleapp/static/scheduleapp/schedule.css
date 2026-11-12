@@ -31,10 +31,10 @@
   background: var(--cn-surf); color: var(--cn-white); font-family: var(--cn-sans);
   box-shadow: 0 24px 80px rgba(0,0,0,.6), inset 0 0 0 1px var(--cn-edge);
 }
-.cn-sch::backdrop { background: rgba(5,5,9,.72); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
-.cn-sch[open] { animation: cn-rise .2s ease-out both; }
+.cn-sch::backdrop { background: rgba(8,7,5,.72); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+.cn-sch[open] { animation: cn-pop var(--cn-t) var(--cn-ease-out) both; }
 .cn-sch .cn-tag { color: var(--cn-faint); }
-.cn-sch h2 { font-size: 22px; font-weight: 850; letter-spacing: -.035em; margin-top: 6px; overflow-wrap: anywhere; }
+.cn-sch h2 { font-family: var(--cn-display); font-size: 26px; font-weight: 500; letter-spacing: -.02em; margin-top: 6px; overflow-wrap: anywhere; }
 .cn-sch-what { margin: 3px 0 0; font-size: 13px; color: var(--cn-mute); font-weight: 600; }
 
 .cn-sch-sec { margin-top: 20px; }
@@ -65,7 +65,7 @@
 .cn-sch-cell b { font-size: 16px; font-weight: 850; }
 .cn-sch-quick .cn-sch-cell { padding: 8px 13px; font-size: 12.5px; }
 .cn-sch-cell:hover { color: var(--cn-white); }
-.cn-sch-cell:focus-visible, .cn-sch-nav:focus-visible { outline: 2px solid var(--cn-gold); outline-offset: 2px; }
+.cn-sch-cell:focus-visible, .cn-sch-nav:focus-visible { outline: 2px solid var(--cn-focus); outline-offset: 2px; }
 .cn-sch-cell[aria-pressed="true"] { background: var(--cn-white); color: var(--cn-void); }
 .cn-sch-cell:disabled { opacity: .28; cursor: not-allowed; }
 .cn-sch-cell:disabled:hover { color: var(--cn-mute); }
@@ -74,7 +74,7 @@
   margin-top: 20px; padding: 13px 16px; border-radius: var(--cn-radius-sm);
   background: var(--cn-deep); display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
 }
-.cn-sch-when b { font-size: 17px; font-weight: 850; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.cn-sch-when b { font-family: var(--cn-mono); font-size: 16px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .cn-sch-when span { font-size: 13px; color: var(--cn-mute); font-weight: 600; }
 .cn-sch-when.is-bad span { color: var(--cn-hot); }
 .cn-sch-foot { margin-top: 18px; display: flex; justify-content: flex-end; gap: 10px; }
