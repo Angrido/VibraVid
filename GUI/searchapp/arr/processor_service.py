@@ -8,6 +8,14 @@ from .clients.sonarr_client import SonarrClient
 logger = logging.getLogger("ARR")
 
 
+def poster_url(images: list[dict] | None) -> str:
+    for image in images or []:
+        url = str(image.get("remoteUrl") or "")
+        if image.get("coverType") == "poster" and url.startswith(("https://", "http://")):
+            return url
+    return ""
+
+
 class ArrProcessorService:
     def __init__(
         self,
@@ -117,6 +125,7 @@ class ArrProcessorService:
                 "tmdbId": elem["series"].get("tmdbId"),
                 "tvdbId": elem["series"].get("tvdbId"),
                 "imdbId": elem["series"].get("imdbId"),
+                "poster": poster_url(elem["series"].get("images")),
                 "monitored": elem["series"].get("monitored", True),
                 "seasons": [],
             }
@@ -156,6 +165,7 @@ class ArrProcessorService:
                         "tags": elem["tags"],
                         "tmdbId": elem.get("tmdbId"),
                         "imdbId": elem.get("imdbId"),
+                        "poster": poster_url(elem.get("images")),
                         "monitored": elem.get("monitored", True),
                         "provider": self._extract_provider(elem["tags"], "radarr"),
                     }

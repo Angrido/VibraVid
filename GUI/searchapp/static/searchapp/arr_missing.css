@@ -60,6 +60,15 @@
 .am-chev { margin-left: auto; color: var(--cn-mute); transition: transform var(--am-mid) var(--am-ease-out); }
 .am-toggle[aria-expanded="true"] .am-chev { transform: rotate(180deg); }
 
+.am-poster {
+  width: 46px; padding: 5px;
+  transition: transform var(--am-mid) var(--am-ease-out), box-shadow var(--am-mid) ease;
+  box-shadow: inset 0 0 0 1px var(--cn-edge), 0 6px 16px -8px rgba(0, 0, 0, .9);
+}
+.am-poster b { font-size: 17px; }
+.am-movies .am-poster { width: 40px; }
+.am-card:hover .am-poster, .am-card:focus-within .am-poster { transform: translateY(-2px) rotate(-1.5deg); }
+.am-card:has(.am-check:checked) .am-poster { box-shadow: inset 0 0 0 1px rgba(var(--cn-hot-a), .6), 0 8px 20px -8px rgba(var(--cn-hot-a), .6); }
 .am-name { font-family: var(--cn-display); font-weight: 500; font-size: 21px; letter-spacing: -.015em; line-height: 1.15; overflow-wrap: anywhere; }
 .am-meta { font-family: var(--cn-mono); color: var(--cn-mute); font-size: 12px; font-weight: 500; letter-spacing: .02em; }
 
@@ -172,6 +181,7 @@ body.am-has-bar .am-page { padding-bottom: 150px; }
 
 @media (prefers-reduced-motion: reduce) {
   .am-card, .am-card-body, .am-result.is-open, .am-chip, .am-state, .am-check:checked { animation: none; }
-  .am-bar, .am-chev, .am-row, .am-card::before { transition: none; }
+  .am-bar, .am-chev, .am-row, .am-card::before, .am-poster { transition: none; }
+  .am-card:hover .am-poster, .am-card:focus-within .am-poster { transform: none; }
   .am-lang-btn[aria-busy="true"] { animation: none; }
 }

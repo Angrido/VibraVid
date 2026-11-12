@@ -67,6 +67,7 @@
 								<input class="am-check" type="checkbox" data-am-scope id="am-s{{ serie.id }}"
 								       aria-label="Select every missing episode of {{ serie.title }}">
 								<button class="am-toggle" type="button" aria-expanded="false" aria-controls="am-sb{{ serie.id }}">
+									{% include "searchapp/_arr_missing_poster.html" with item=serie %}
 									<span class="am-name" data-no-tr>{{ serie.title }}</span>
 									<span class="am-meta">
 										{% if serie.year %}<span class="cn-num">{{ serie.year }}</span> · {% endif %}<span class="cn-num">{{ serie.episode_count }}</span> <span>missing</span>{% if serie.provider %} · <span data-no-tr>{{ serie.provider }}</span>{% endif %}
@@ -119,6 +120,7 @@
 								<label class="am-pick">
 									<input class="am-check" type="checkbox" data-am-movie="{{ movie.id }}"
 									       {% if movie.state == "pending" or movie.state == "downloading" %}disabled{% endif %}>
+									{% include "searchapp/_arr_missing_poster.html" with item=movie %}
 									<span class="am-name" data-no-tr>{{ movie.title }}</span>
 									<span class="am-meta">{% if movie.year %}<span class="cn-num">{{ movie.year }}</span>{% endif %}{% if movie.provider %} · <span data-no-tr>{{ movie.provider }}</span>{% endif %}</span>
 								</label>

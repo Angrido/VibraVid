@@ -39,7 +39,13 @@ class FakeSonarr:
         return {}
 
     def get_all_missing(self):
-        series = {"id": 7, "title": "Zeta Show", "path": "/tv/zeta", "tags": [], "year": 2020, "tmdbId": 70}
+        series = {
+            "id": 7, "title": "Zeta Show", "path": "/tv/zeta", "tags": [], "year": 2020, "tmdbId": 70,
+            "images": [
+                {"coverType": "banner", "remoteUrl": "https://img.example/zeta-banner.jpg"},
+                {"coverType": "poster", "remoteUrl": "https://img.example/zeta-poster.jpg"},
+            ],
+        }
         return [
             {"id": 702, "title": "Two", "seasonNumber": 1, "episodeNumber": 2, "series": series},
             {"id": 701, "title": "One", "seasonNumber": 1, "episodeNumber": 1, "series": series},
@@ -57,7 +63,10 @@ class FakeRadarr:
         return {}
 
     def get_all_missing(self):
-        return [{"id": 31, "title": "Alpha Movie", "year": 2021, "path": "/movies/alpha", "tags": [], "tmdbId": 310}]
+        return [{
+            "id": 31, "title": "Alpha Movie", "year": 2021, "path": "/movies/alpha", "tags": [], "tmdbId": 310,
+            "images": [{"coverType": "poster", "remoteUrl": "javascript:alert(1)"}],
+        }]
 
 
 @pytest.fixture(autouse=True)
@@ -151,6 +160,14 @@ def test_missing_page_renders_items(client, arr):
     assert "Zeta Show" in page and "Alpha Movie" in page
     assert 'data-am-episode="701"' in page and 'data-am-movie="31"' in page
     assert "Check languages" in page
+
+
+def test_missing_page_shows_arr_posters_and_falls_back_to_initials(client, arr):
+    page = client.get("/arr-missing/").content.decode()
+
+    assert 'src="https://img.example/zeta-poster.jpg"' in page
+    assert "zeta-banner" not in page
+    assert "javascript:" not in page
 
 
 def test_missing_page_explains_when_arr_is_not_connected(client, monkeypatch):
