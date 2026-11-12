@@ -38,8 +38,8 @@
 			</span>
 		</div>
 
-		{% for label in unreachable %}
-			<p class="cn-msg is-bad" role="alert">{{ label }} did not answer, so its missing items are not listed. Check that it is running and that the API key is right.</p>
+		{% for label, problem in problems.items %}
+			<p class="cn-msg is-bad" role="alert">{% if problem == "unauthorized" %}{{ label }} rejected the API key, so its missing items are not listed. Copy the key again from {{ label }} and save it in the ARR settings.{% else %}{{ label }} did not answer, so its missing items are not listed. Check that it is running and that its URL in the ARR settings is right.{% endif %}</p>
 		{% endfor %}
 		{% if polling_active %}
 			<p class="cn-msg is-warn">Automatic polling is on, so missing items may also be downloaded without asking. Turn off automatic downloads in the ARR settings to decide everything from this page.</p>
@@ -93,7 +93,7 @@
 														<span class="am-code cn-mono">S{{ season.number|stringformat:"02d" }}E{{ episode.episodeNumber|stringformat:"02d" }}</span>
 														<span class="am-ep" data-no-tr>{{ episode.title|default:"" }}</span>
 													</label>
-													<span class="am-state-slot" data-am-key="{{ episode.queue_key }}" data-am-state="{{ episode.state }}">{% include "searchapp/_arr_missing_state.html" with state=episode.state %}</span>
+													<span class="am-state-slot" data-am-key="{{ episode.queue_key }}" data-am-state="{{ episode.state }}">{% include "searchapp/_arr_missing_state.html" with state=episode.state reason=episode.reason %}</span>
 													<button class="cn-opt am-lang-btn" type="button" data-am-check-episode="{{ episode.id }}"
 													        aria-describedby="am-r-e{{ episode.id }}">Check languages</button>
 													<div class="am-result" id="am-r-e{{ episode.id }}" role="status" aria-live="polite"></div>
@@ -124,7 +124,7 @@
 									<span class="am-name" data-no-tr>{{ movie.title }}</span>
 									<span class="am-meta">{% if movie.year %}<span class="cn-num">{{ movie.year }}</span>{% endif %}{% if movie.provider %} · <span data-no-tr>{{ movie.provider }}</span>{% endif %}</span>
 								</label>
-								<span class="am-state-slot" data-am-key="{{ movie.queue_key }}" data-am-state="{{ movie.state }}">{% include "searchapp/_arr_missing_state.html" with state=movie.state %}</span>
+								<span class="am-state-slot" data-am-key="{{ movie.queue_key }}" data-am-state="{{ movie.state }}">{% include "searchapp/_arr_missing_state.html" with state=movie.state reason=movie.reason %}</span>
 								<button class="cn-opt am-lang-btn" type="button" data-am-check-movie="{{ movie.id }}"
 								        aria-describedby="am-r-m{{ movie.id }}">Check languages</button>
 								<div class="am-result" id="am-r-m{{ movie.id }}" role="status" aria-live="polite"></div>
@@ -141,7 +141,7 @@
 				<p class="am-bar-msg" id="am-msg" role="status" aria-live="polite"></p>
 				<button class="cn-cta" type="button" id="am-download" disabled>Download selected</button>
 			</div>
-		{% elif not unreachable %}
+		{% elif not problems %}
 			<div class="am-state is-good">
 				<h2>Your library is complete</h2>
 				<p>Sonarr and Radarr are not waiting for any monitored episode or movie.</p>

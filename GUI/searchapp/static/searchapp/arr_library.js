@@ -5,11 +5,54 @@
     const filter = document.getElementById("lib-filter");
     const onlyMissing = document.getElementById("lib-missing");
     const onlyItalian = document.getElementById("lib-italian");
+    const onlyBusy = document.getElementById("lib-busy");
+    const sort = document.getElementById("lib-sort");
+    const toggles = [onlyMissing, onlyItalian, onlyBusy];
     const kinds = [...document.querySelectorAll("[data-lib-kind]")];
+    const VIEW_KEY = "vv-lib-view";
     let kind = "all";
     let timer;
 
     const pressed = button => button?.getAttribute("aria-pressed") === "true";
+    const sorters = {
+        title: (a, b) => (a.dataset.title > b.dataset.title) - (a.dataset.title < b.dataset.title),
+        missing: (a, b) => Number(b.dataset.missing) - Number(a.dataset.missing),
+        added: (a, b) => b.dataset.added.localeCompare(a.dataset.added),
+        size: (a, b) => Number(b.dataset.size) - Number(a.dataset.size),
+    };
+
+    function sortTiles() {
+        const by = sorters[sort.value] || sorters.title;
+        document.querySelectorAll(".lib-grid").forEach(grid => {
+            grid.append(...[...grid.children].sort((a, b) => by(a, b) || sorters.title(a, b)));
+        });
+    }
+
+    function setKind(next) {
+        kind = kinds.some(button => button.dataset.libKind === next) ? next : "all";
+        kinds.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.libKind === kind)));
+    }
+
+    function rememberView() {
+        try {
+            sessionStorage.setItem(VIEW_KEY, JSON.stringify({
+                query: filter.value, kind, sort: sort.value, on: toggles.filter(pressed).map(toggle => toggle.id),
+            }));
+        } catch (_) {}
+    }
+
+    function restoreView() {
+        let view = null;
+        try { view = JSON.parse(sessionStorage.getItem(VIEW_KEY) || "null"); } catch (_) {}
+        if (!view) return;
+        filter.value = view.query || "";
+        setKind(view.kind);
+        toggles.forEach(toggle => toggle.setAttribute("aria-pressed", String((view.on || []).includes(toggle.id))));
+        if (sorters[view.sort] && view.sort !== "title") {
+            sort.value = view.sort;
+            sortTiles();
+        }
+    }
 
     function apply() {
         if (!filter) return;
@@ -22,7 +65,8 @@
                 const match = groupOn
                     && (!query || item.dataset.title.includes(query))
                     && (!pressed(onlyMissing) || Number(item.dataset.missing) > 0)
-                    && (!pressed(onlyItalian) || ["good", "warn"].includes(item.dataset.libLang));
+                    && (!pressed(onlyItalian) || ["good", "warn"].includes(item.dataset.libLang))
+                    && (!pressed(onlyBusy) || item.dataset.libBusy === "1");
                 item.hidden = !match;
                 if (match) visible += 1;
             });
@@ -32,31 +76,27 @@
         document.getElementById("lib-nomatch").hidden = shown > 0;
     }
 
+    function choose() {
+        rememberView();
+        apply();
+    }
+
     kinds.forEach(button => button.addEventListener("click", () => {
-        kind = button.dataset.libKind;
-        kinds.forEach(other => other.setAttribute("aria-pressed", String(other === button)));
-        apply();
+        setKind(button.dataset.libKind);
+        choose();
     }));
-    [onlyMissing, onlyItalian].forEach(toggle => toggle?.addEventListener("click", () => {
+    toggles.forEach(toggle => toggle?.addEventListener("click", () => {
         toggle.setAttribute("aria-pressed", String(!pressed(toggle)));
-        apply();
+        choose();
     }));
     filter?.addEventListener("input", () => {
         clearTimeout(timer);
-        timer = setTimeout(apply, 120);
+        timer = setTimeout(choose, 120);
     });
-
-    const status = document.getElementById("lib-lang-status");
-    if (!status) return;
-    const checkAll = document.getElementById("lib-lang-all");
-    const interval = document.getElementById("lib-lang-interval");
-    const checkButtons = () => [checkAll, ...document.querySelectorAll("[data-lib-check]")];
-    const toneClass = {good: "is-done", warn: "is-warn", bad: "is-dead"};
-    let polling = null;
-
-    const formatTime = seconds => new Date(seconds * 1000).toLocaleString(window.CN_LANG || undefined,
-        {dateStyle: "medium", timeStyle: "short"});
-    document.querySelectorAll("[data-lib-ts]").forEach(node => { node.textContent = formatTime(Number(node.dataset.libTs)); });
+    sort?.addEventListener("change", () => {
+        sortTiles();
+        rememberView();
+    });
 
     async function request(url, body) {
         const options = body === undefined ? {} : {
@@ -71,6 +111,107 @@
         return data;
     }
 
+    const activityLook = {
+        downloading: ["is-run", "Downloading"], queued: ["is-warn", "Queued"], failed: ["is-dead", "Failed"],
+    };
+    const LIVE_IDS = ["lib-stats", "lib-series-n", "lib-movies-n"];
+    let activityTimer = null;
+    let activityBusy = false;
+
+    function fillBadge(badge, label, count) {
+        badge.replaceChildren(Object.assign(document.createElement("span"), {textContent: tr(label)}));
+        if (count) badge.append(" ", Object.assign(document.createElement("span"), {className: "cn-num", textContent: count}));
+    }
+
+    function paintActivity(titles) {
+        const landed = [];
+        document.querySelectorAll("[data-lib-key]").forEach(item => {
+            const counts = {...titles[item.dataset.libKey]};
+            counts.failed = Math.min(counts.failed || 0, Number(item.dataset.missing));
+            const state = Object.keys(activityLook).find(name => counts[name]) || "";
+            const busy = state === "downloading" || state === "queued";
+            if (item.dataset.libBusy === "1" && !busy) landed.push(item.dataset.libKey);
+            item.dataset.libBusy = busy ? "1" : "";
+            const badge = item.querySelector("[data-lib-activity]");
+            const shown = state + ":" + (counts[state] || 0);
+            if (badge.dataset.shown === shown) return;
+            badge.dataset.shown = shown;
+            badge.hidden = !state;
+            if (!state) return;
+            const [tone, label] = activityLook[state];
+            badge.className = "cn-st " + tone;
+            fillBadge(badge, label, counts[state] > 1 && counts[state]);
+        });
+        return landed;
+    }
+
+    function scheduleActivity() {
+        activityTimer = document.querySelector('[data-lib-busy="1"]') ? setTimeout(pollActivity, 4000) : null;
+    }
+
+    async function reloadTiles(keys) {
+        const response = await fetch(window.location.href, {cache: "no-store", signal: AbortSignal.timeout(60000)});
+        if (!response.ok) throw new Error(response.status);
+        const fresh = new DOMParser().parseFromString(await response.text(), "text/html");
+        keys.forEach(key => {
+            const next = fresh.querySelector(`[data-lib-key="${key}"]`);
+            if (!next) return;
+            const old = document.querySelector(`[data-lib-key="${key}"]`);
+            const check = next.querySelector("[data-lib-check]");
+            if (check) check.disabled = !!old.querySelector("[data-lib-check]")?.disabled;
+            old.replaceWith(next);
+        });
+        LIVE_IDS.forEach(id => {
+            const next = fresh.getElementById(id);
+            if (next) document.getElementById(id)?.replaceWith(next);
+        });
+    }
+
+    async function refreshLanded(keys, titles) {
+        try {
+            await reloadTiles(keys);
+            paintActivity(titles);
+            if (sort.value !== "title") sortTiles();
+        } catch (_) {
+            keys.forEach(key => { document.querySelector(`[data-lib-key="${key}"]`).dataset.libBusy = "1"; });
+        }
+    }
+
+    async function pollActivity() {
+        if (activityBusy || document.hidden) return;
+        activityBusy = true;
+        clearTimeout(activityTimer);
+        try {
+            const data = await request(config.activityUrl);
+            const landed = paintActivity(data.titles);
+            if (landed.length) await refreshLanded(landed, data.titles);
+            apply();
+        } catch (_) {}
+        activityBusy = false;
+        scheduleActivity();
+    }
+
+    if (filter) {
+        restoreView();
+        paintActivity(JSON.parse(document.getElementById("lib-activity").textContent));
+        apply();
+        scheduleActivity();
+        document.addEventListener("visibilitychange", pollActivity);
+        window.addEventListener("pageshow", event => { if (event.persisted) pollActivity(); });
+    }
+
+    const status = document.getElementById("lib-lang-status");
+    if (!status) return;
+    const checkAll = document.getElementById("lib-lang-all");
+    const interval = document.getElementById("lib-lang-interval");
+    const checkButtons = () => [checkAll, ...document.querySelectorAll("[data-lib-check]")];
+    const toneClass = {good: "is-done", warn: "is-warn", bad: "is-dead"};
+    let polling = null;
+
+    const formatTime = seconds => new Date(seconds * 1000).toLocaleString(window.CN_LANG || undefined,
+        {dateStyle: "medium", timeStyle: "short"});
+    document.querySelectorAll("[data-lib-ts]").forEach(node => { node.textContent = formatTime(Number(node.dataset.libTs)); });
+
     function setStatus(text, tone) {
         status.textContent = text;
         status.className = "lib-langbar-status" + (tone ? " cn-msg is-" + tone : "");
@@ -83,10 +224,7 @@
             const summary = titles[item.dataset.libKey];
             item.dataset.libLang = summary ? summary.tone : "";
             badge.className = "cn-st lib-lang-st " + (toneClass[summary?.tone] || "is-wait");
-            badge.replaceChildren(Object.assign(document.createElement("span"), {textContent: tr(summary ? summary.label : "Not checked")}));
-            if (summary?.count) {
-                badge.append(" ", Object.assign(document.createElement("span"), {className: "cn-num", textContent: summary.count}));
-            }
+            fillBadge(badge, summary ? summary.label : "Not checked", summary?.count);
             const link = item.querySelector("[data-lib-source]");
             const source = summary?.source;
             const valid = source && /^https?:\/\//i.test(source.url || "");

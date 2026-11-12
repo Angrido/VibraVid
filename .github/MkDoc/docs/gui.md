@@ -101,7 +101,7 @@ A banner appears when a newer release exists (`api/version/check/`, cached 1 h);
 
 ### ARR stack page
 
-`/arr-stack/`: the ARR processing queue (filter by status/source/sync) and sync trigger (`api/arr/trigger-sync/`). Setup: [ARR Integration](arr.md).
+`/arr-stack/`: the ARR processing queue (filter by status/source/sync) and sync trigger (`api/arr/trigger-sync/`). A failed row shows why it failed and has a **Retry** button (`api/arr/queue/<id>/retry/`). Setup: [ARR Integration](arr.md).
 
 ![ARR queue](assets/gui/arr_stack.png)
 

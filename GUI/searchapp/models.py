@@ -66,6 +66,21 @@ class ArrMediaRequest(models.Model):
         FAILED = "failed", "Failed"
         SKIPPED = "skipped", "Skipped"
 
+    FAILURE_REASONS = {
+        "search_no_results": "Not found on any configured provider.",
+        "season_not_available": "The provider does not have this season.",
+        "episode_not_available": "The provider does not have this episode.",
+        "tmdb_id_missing": "No TMDB id could be found for this title, so it cannot be matched safely.",
+        "external_id_conflict": "Its TMDB and TVDB ids point to different titles.",
+        "import_not_confirmed": "Downloaded, but the file was not imported.",
+        "series_removed": "The series is no longer in Sonarr.",
+        "movie_removed": "The movie is no longer in Radarr.",
+        "sonarr_unmonitored": "No longer monitored in Sonarr.",
+        "radarr_unmonitored": "No longer monitored in Radarr.",
+        "interrupted": "The download was interrupted before it finished.",
+        "download_failed": "The download did not complete. Details are in the logs.",
+    }
+
     # External IDs
     imdb_id = models.CharField(max_length=20, null=True, blank=True, db_index=True)
     tmdb_id = models.CharField(max_length=20, null=True, blank=True, db_index=True)
@@ -85,6 +100,7 @@ class ArrMediaRequest(models.Model):
     # State
     status = models.CharField(max_length=15, choices=Status.choices, default=Status.PENDING)
     sync_source = models.CharField(max_length=15, choices=SyncSource.choices, default=SyncSource.POLLING)
+    last_error = models.CharField(max_length=40, blank=True, default="")
 
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
@@ -103,6 +119,16 @@ class ArrMediaRequest(models.Model):
     def __str__(self):
         ep = f" S{self.season_number}E{self.episode_number}" if self.season_number else ""
         return f"[{self.arr_source}] {self.title}{ep} ({self.status})"
+
+    @property
+    def retryable(self) -> bool:
+        return self.status in (self.Status.FAILED, self.Status.IMPORT_PENDING)
+
+    @property
+    def failure_reason(self) -> str:
+        if not self.retryable:
+            return ""
+        return self.FAILURE_REASONS.get(self.last_error, self.FAILURE_REASONS["download_failed"])
 
 
 class ArrWebhookEvent(models.Model):

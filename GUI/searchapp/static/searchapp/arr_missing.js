@@ -152,8 +152,10 @@
         slot.innerHTML = entry.html;
         const row = slot.closest(".am-row");
         const input = row.querySelector("[data-am-episode], [data-am-movie]");
-        input.disabled = locked;
-        if (locked) input.checked = false;
+        if (input) {
+            input.disabled = locked;
+            if (locked) input.checked = false;
+        }
         row.classList.toggle("is-sent", ACTIVE_STATES.includes(entry.state));
     }
 

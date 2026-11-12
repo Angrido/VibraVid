@@ -19,11 +19,11 @@
 			<a class="cn-cta" href="{% url 'settings_editor' %}">Open settings</a>
 		</div>
 	</div>
-{% elif failed %}
+{% elif problem %}
 	<div class="cn-pad am-page" style="padding-top:34px">
 		<div class="am-state is-bad" role="alert">
 			<h2>This title could not be loaded</h2>
-			<p>Sonarr or Radarr did not answer. Check that it is running, then try again. Details are in the logs.</p>
+			<p>{% if problem == "unauthorized" %}Sonarr or Radarr rejected the API key. Copy the key again and save it in the ARR settings.{% else %}Sonarr or Radarr did not answer. Check that it is running, then try again. Details are in the logs.{% endif %}</p>
 			<span class="cn-acts">
 				<a class="cn-cta" href="{{ request.path }}">Try again</a>
 				<a class="cn-cta is-ghost" href="{% url 'arr_library' %}">Back to library</a>
@@ -94,11 +94,15 @@
 					<ul class="am-rows am-movies">
 						<li class="am-row am-card" data-am-item>
 							<label class="am-pick">
-								<input class="am-check" type="checkbox" data-am-movie="{{ item.id }}" {% if not selectable %}disabled{% endif %}>
+								{% if item.state == "missing" %}
+									<input class="am-check" type="checkbox" data-am-movie="{{ item.id }}" {% if not selectable %}disabled{% endif %}>
+								{% else %}
+									<span class="am-check lib-nocheck" aria-hidden="true"></span>
+								{% endif %}
 								<span class="am-name" data-no-tr>{{ item.title }}</span>
 								{% if item.year %}<span class="am-meta cn-num">{{ item.year }}</span>{% endif %}
 							</label>
-							{% if item.queue %}{% include "searchapp/_arr_missing_state.html" with state=item.queue %}{% else %}{% include "searchapp/_arr_library_state.html" with state=item.state kind="movie" cls="am-state-tag" %}{% endif %}
+							<span class="am-state-slot" data-am-key="{{ item.queue_key }}" data-am-state="{{ item.queue }}">{% include "searchapp/_arr_missing_state.html" with state=item.queue reason=item.reason %}</span>{% include "searchapp/_arr_library_state.html" with state=item.state kind="movie" cls="am-state-tag lib-idle" %}
 							<button class="cn-opt am-lang-btn" type="button" data-am-check-movie="{{ item.id }}" aria-describedby="am-r-m{{ item.id }}">Check languages</button>
 							<div class="am-result" id="am-r-m{{ item.id }}" role="status" aria-live="polite"></div>
 						</li>
@@ -128,8 +132,8 @@
 								{% for episode in season.episodes %}
 									<li class="am-row lib-ep is-{{ episode.state }}">
 										<label class="am-pick">
-											{% if episode.selectable %}
-												<input class="am-check" type="checkbox" data-am-episode="{{ episode.id }}">
+											{% if episode.pickable %}
+												<input class="am-check" type="checkbox" data-am-episode="{{ episode.id }}" {% if not episode.selectable %}disabled{% endif %}>
 											{% else %}
 												<span class="am-check lib-nocheck" aria-hidden="true"></span>
 											{% endif %}
@@ -137,7 +141,7 @@
 											<span class="am-ep" data-no-tr>{{ episode.title }}</span>
 											{% if episode.air_date and episode.state != "unaired" %}<span class="lib-date cn-mono">{{ episode.air_date|date:"Y-m-d" }}</span>{% endif %}
 										</label>
-										{% if episode.queue %}{% include "searchapp/_arr_missing_state.html" with state=episode.queue %}{% else %}{% include "searchapp/_arr_library_state.html" with state=episode.state kind="episode" air_date=episode.air_date cls="am-state-tag" %}{% endif %}
+										{% if episode.state != "complete" %}<span class="am-state-slot" data-am-key="{{ episode.queue_key }}" data-am-state="{{ episode.queue }}">{% include "searchapp/_arr_missing_state.html" with state=episode.queue reason=episode.reason %}</span>{% endif %}{% include "searchapp/_arr_library_state.html" with state=episode.state kind="episode" air_date=episode.air_date cls="am-state-tag lib-idle" %}
 										{% if episode.state == "missing" %}
 											<button class="cn-opt am-lang-btn" type="button" data-am-check-episode="{{ episode.id }}" aria-describedby="am-r-e{{ episode.id }}">Check languages</button>
 											<div class="am-result" id="am-r-e{{ episode.id }}" role="status" aria-live="polite"></div>
@@ -167,6 +171,7 @@
 <script src="{% static 'searchapp/arr_missing.js' %}?v={{ app_version }}"
         data-download-url="{% url 'arr_missing_download' %}"
         data-check-url="{% url 'arr_missing_check' %}"
+        data-states-url="{% url 'arr_missing_states' %}"
         data-csrf="{{ csrf_token }}"></script>
 {% endif %}
 {% endblock %}

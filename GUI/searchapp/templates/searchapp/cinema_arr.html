@@ -126,6 +126,7 @@
 									<span class="cn-s">
 										{% if entry.success == True %}succeeded{% elif entry.success == False %}closed without success{% else %}still open{% endif %}
 									</span>
+									{% if item.failure_reason %}<span class="cn-s">{{ item.failure_reason }}</span>{% endif %}
 								</td>
 
 								<td>
@@ -146,14 +147,20 @@
 								</td>
 
 								<td>
-									{% if entry.started_at and not entry.completed_at %}
-										<button class="cn-cta is-ghost" type="button" disabled
-										        title="Download in progress, wait for it to finish">Delete</button>
-									{% else %}
-										<button class="cn-cta is-ghost cn-arr-delete" type="button"
-										        data-url="{% url 'arr_delete_request' entry.id %}"
-										        data-title="{{ item.title }}">Delete</button>
-									{% endif %}
+									<span class="cn-acts">
+										{% if item.retryable %}
+											<button class="cn-cta is-ghost cn-arr-retry" type="button"
+											        data-url="{% url 'arr_retry_request' entry.id %}">Retry</button>
+										{% endif %}
+										{% if entry.started_at and not entry.completed_at %}
+											<button class="cn-cta is-ghost" type="button" disabled
+											        title="Download in progress, wait for it to finish">Delete</button>
+										{% else %}
+											<button class="cn-cta is-ghost cn-arr-delete" type="button"
+											        data-url="{% url 'arr_delete_request' entry.id %}"
+											        data-title="{{ item.title }}">Delete</button>
+										{% endif %}
+									</span>
 								</td>
 							</tr>
 						{% endwith %}
@@ -249,6 +256,20 @@
 			});
 	}
 
+	function postTo(url) {
+		return fetch(url, {
+			method: "POST",
+			headers: { "X-CSRFToken": "{{ csrf_token }}" }
+		}).then(function (r) {
+			return r.json().then(function (data) {
+				if (!r.ok || data.status === "error") {
+					throw new Error(data.message || "Request failed.");
+				}
+				return data;
+			});
+		});
+	}
+
 	function deleteRequest(del) {
 		var title = del.dataset.title || "this request";
 		if (!window.confirm(
@@ -262,18 +283,7 @@
 		del.disabled = true;
 		say("Deleting…");
 
-		fetch(del.dataset.url, {
-			method: "POST",
-			headers: { "X-CSRFToken": "{{ csrf_token }}" }
-		})
-			.then(function (r) {
-				return r.json().then(function (data) {
-					if (!r.ok || data.status === "error") {
-						throw new Error(data.message || "delete failed");
-					}
-					return data;
-				});
-			})
+		postTo(del.dataset.url)
 			.then(function () {
 				say("Request deleted.", "good");
 				refresh();
@@ -284,9 +294,26 @@
 			});
 	}
 
+	function retryRequest(retry) {
+		retry.disabled = true;
+		say("Sending to the download queue...");
+
+		postTo(retry.dataset.url)
+			.then(function (data) {
+				say(data.message, "good");
+				refresh();
+			})
+			.catch(function (err) {
+				say(err.message, "bad");
+				retry.disabled = false;
+			});
+	}
+
 	document.addEventListener("click", function (event) {
 		var sync = event.target.closest("#cn-arr-sync");
 		if (sync) return startSync(sync);
+		var retry = event.target.closest(".cn-arr-retry");
+		if (retry) return retryRequest(retry);
 		var del = event.target.closest(".cn-arr-delete");
 		if (del) deleteRequest(del);
 	});

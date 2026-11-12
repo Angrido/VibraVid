@@ -34,9 +34,9 @@
 .lib-langbar-note { margin: 0; color: var(--cn-mute); line-height: 1.5; }
 .lib-langbar-status { margin: 0; min-height: 1.5em; }
 .lib-langbar-actions { display: flex; flex-wrap: wrap; align-items: end; gap: 12px 16px; }
-.lib-langbar-actions select.cn-mini { min-height: 44px; min-width: 170px; }
+.lib-langbar-actions select.cn-mini, .lib-tools select.cn-mini { min-height: 44px; min-width: 170px; }
 .lib-langbar-actions .cn-cta { min-height: 44px; }
-.lib-tile .cn-flag { top: 10px; left: 10px; right: 10px; display: flex; }
+.lib-tile .cn-flag { top: 10px; left: 10px; right: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
 .lib-tile .cn-flag .cn-st { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .lib-tile .cn-runbar i { box-shadow: 0 0 10px rgba(var(--cn-hot-a), .7); }
 .lib-tile:has(.cn-st.is-done) .cn-runbar i { background-color: var(--cn-go); box-shadow: none; }
@@ -80,6 +80,7 @@
 .lib-season .am-chev { margin-left: 0; }
 .lib-sbar.is-full i { background-color: var(--cn-go); box-shadow: none; }
 .lib-nocheck { visibility: hidden; }
+.am-state-slot:not(:empty) + .lib-idle { display: none; }
 .lib-date { font-size: 12px; color: var(--cn-faint); }
 .lib-ep.is-complete .am-code { color: var(--cn-go); }
 .lib-ep.is-unaired .am-ep,
