@@ -623,12 +623,13 @@ def trigger_polling_sync(full_resync: bool = False, manual: bool = False) -> int
 
     arr_views_mod.set_max_download_slots(cfg.get("max_concurrent_downloads", 1))
 
-    from searchapp.log_retention import purge_old_logs
+    from searchapp.log_retention import purge_old_logs, purge_old_webhook_events
 
     from .downloader_service import ArrDownloaderService
     from .processor_service import ArrProcessorService
 
     purge_old_logs()
+    purge_old_webhook_events()
     _reconcile_orphaned_downloads(older_than_seconds=cfg.get("download_timeout", 7200))
     _reconcile_unmonitored_pending(sonarr=sonarr, radarr=radarr)
     if manual:

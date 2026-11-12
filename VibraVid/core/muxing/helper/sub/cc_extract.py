@@ -57,8 +57,8 @@ def extract_embedded_cc(video_path: str, output_srt_path: str, instream_id: str 
         if os.path.exists(work_path):
             try:
                 os.remove(work_path)
-            except Exception:
-                pass
+            except OSError as exc:
+                logger.debug("Could not remove a temporary path: %s", exc)
         return None
 
     if not os.path.exists(work_path) or os.path.getsize(work_path) == 0:
@@ -66,8 +66,8 @@ def extract_embedded_cc(video_path: str, output_srt_path: str, instream_id: str 
         if os.path.exists(work_path):
             try:
                 os.remove(work_path)
-            except Exception:
-                pass
+            except OSError as exc:
+                logger.debug("Could not remove a temporary path: %s", exc)
         return None
 
     if not same_dir:

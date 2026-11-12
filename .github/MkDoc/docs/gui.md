@@ -38,6 +38,7 @@ Open `http://<host>:8000`. For Docker/NAS use the [Docker](docker.md) and [NAS](
 | Clear all queued (active keep running) | `api/clear-queued-downloads/` |
 | Stop and clear the queue | `api/kill-and-clear-queue/` |
 | Clear history (completed/failed) | `api/clear-history/` |
+| Retry a failed GUI download once, with the same request (site, item, season, episodes, folder, quality, audio) | `api/retry-download/` |
 
 ### Watchlist & auto-download
 
@@ -96,7 +97,7 @@ Settings -> *Providers* -> **Add a provider** installs a site module ZIP (`api/u
 
 ### Updates
 
-A banner appears when a newer release exists (`api/version/check/`, cached 1 h); `api/version/update/` applies it ([Docker one-click](docker.md)). `api/binaries/update/` is the GUI counterpart of `--binary-update`. `api/imp-service/refresh/` (the **Refresh external import** button) pulls the newest commit of the `imp_service` repositories and reloads the services. `auto_check_update = false` hides the banner.
+A banner appears when a newer release exists (`api/version/check/`, cached 1 h); `api/version/update/` applies it ([Docker one-click](docker.md)). `api/binaries/update/` is the GUI counterpart of `--binary-update`. **Extensions › Binaries** lists FFmpeg, FFprobe, MKVToolNix, Velora and the optional tools with their path and version (`api/dependencies/`, never downloads anything); a missing required one also shows a warning at the top of Settings. `api/imp-service/refresh/` (the **Refresh external import** button) pulls the newest commit of the `imp_service` repositories and reloads the services. `auto_check_update = false` hides the banner.
 
 ### ARR stack page
 

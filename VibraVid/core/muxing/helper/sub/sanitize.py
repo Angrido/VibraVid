@@ -179,7 +179,7 @@ def trim_subtitle_to_duration(subtitle_path: str, max_duration: float) -> str:
         if os.path.exists(trimmed_path) and trimmed_path != subtitle_path:
             try:
                 os.remove(trimmed_path)
-            except Exception:
-                pass
+            except OSError as exc:
+                logger.debug("Could not remove a temporary path: %s", exc)
 
     return subtitle_path

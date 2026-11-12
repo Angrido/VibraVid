@@ -22,9 +22,11 @@ from .._download_infra import (
     scheduled_downloads,
     scheduled_downloads_lock,
 )
-from ._shared import _tag_anime_entries
+from ._shared import _run_download_in_thread, _tag_anime_entries
 
 logger = logging.getLogger(__name__)
+
+RETRYABLE_STATUSES = frozenset({"failed"})
 
 
 def get_downloads_json(request: HttpRequest) -> JsonResponse:
@@ -44,7 +46,7 @@ def get_downloads_json(request: HttpRequest) -> JsonResponse:
     return JsonResponse({
         "active": _tag_anime_entries(active_downloads),
         "scheduled": _tag_anime_entries(scheduled),
-        "history": _tag_anime_entries(history),
+        "history": _tag_anime_entries([_public_history_entry(entry) for entry in history]),
         "pending_tracks": [
             {**req, "title": next(
                 (item.get("title") for item in active_downloads if item.get("id") == req["download_id"]),
@@ -52,6 +54,29 @@ def get_downloads_json(request: HttpRequest) -> JsonResponse:
             )} for req in manual_track_broker.list_pending()
         ],
     })
+
+
+def _public_history_entry(entry: dict) -> dict:
+    public = {key: value for key, value in entry.items() if key != "retry"}
+    public["retryable"] = bool(entry.get("retry")) and entry.get("status") in RETRYABLE_STATUSES
+    return public
+
+
+@require_POST
+def retry_download(request: HttpRequest) -> JsonResponse:
+    try:
+        body = json.loads(request.body or b"{}")
+    except (ValueError, TypeError):
+        body = None
+    if not isinstance(body, dict):
+        return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+    retry = download_tracker.take_retry_request(str(body.get("download_id") or ""), RETRYABLE_STATUSES)
+    if retry is None:
+        return JsonResponse({"status": "error", "message": "Download not found or not retryable"}, status=404)
+
+    _run_download_in_thread(**retry)
+    return JsonResponse({"status": "success"})
 
 
 @require_POST
@@ -293,5 +318,6 @@ __all__ = [
     'clear_queued_downloads',
     'kill_and_clear_queue',
     'clear_download_history',
+    'retry_download',
     'stop_all_downloads',
 ]

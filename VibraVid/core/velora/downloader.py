@@ -289,7 +289,7 @@ class MediaDownloader(
                 try:
                     signal.set_wakeup_fd(-1)
                 except Exception:
-                    pass
+                    logger.debug("Ignored error in a best-effort step", exc_info=True)
                 _parent_http_version = context_tracker.http_version
 
                 def _run_externals() -> None:
@@ -603,7 +603,7 @@ class MediaDownloader(
                 parsed = urlparse(self.url)
                 h["Referer"] = f"{parsed.scheme}://{parsed.netloc}/"
             except Exception:
-                pass
+                logger.debug("Ignored error in a best-effort step", exc_info=True)
 
         h.setdefault("Accept", "*/*")
         h.setdefault("Accept-Encoding", "gzip, deflate")

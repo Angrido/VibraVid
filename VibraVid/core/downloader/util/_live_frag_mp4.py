@@ -202,5 +202,5 @@ class LiveFragMp4Decryptor:
             try:
                 if p.exists():
                     p.unlink()
-            except Exception:
-                pass
+            except OSError as exc:
+                logger.debug("Could not remove a temporary path: %s", exc)

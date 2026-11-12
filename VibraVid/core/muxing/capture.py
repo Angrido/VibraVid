@@ -349,7 +349,7 @@ def capture_ffmpeg_real_time(
                 try:
                     process.stdout.close()
                 except Exception:
-                    pass
+                    logger.debug("Ignored error in a best-effort step", exc_info=True)
 
             if output_thread:
                 output_thread.join(timeout=10.0)

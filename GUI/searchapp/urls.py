@@ -30,6 +30,7 @@ urlpatterns = [
     path("api/kill-and-clear-queue/", views.kill_and_clear_queue, name="kill_and_clear_queue"),
     path("api/stop-all-downloads/", views.stop_all_downloads, name="stop_all_downloads"),
     path("api/clear-history/", views.clear_download_history, name="clear_download_history"),
+    path("api/retry-download/", views.retry_download, name="retry_download"),
 
     # Watchlist
     path("watchlist/", views.cinema_watchlist, name="watchlist"),
@@ -78,6 +79,7 @@ urlpatterns = [
     path("api/version/check/", views.check_updates, name="check_updates"),
     path("api/version/update/", views.trigger_update, name="trigger_update"),
     path("api/binaries/update/", views.trigger_binaries_update, name="trigger_binaries_update"),
+    path("api/dependencies/", views.dependencies_status, name="dependencies_status"),
     path("api/imp-service/refresh/", views.refresh_external_import, name="refresh_external_import"),
 
     # Telegram bot bridge (docker/telegram_bot/, trigger-download only — see api_bot.py)

@@ -22,17 +22,8 @@ from textual.widgets import (
     TabPane,
 )
 
-from VibraVid.cli.run import _probe_binary_version
 from VibraVid.setup import resolve_cdm
-from VibraVid.setup.system import (
-    get_dovi_tool_path,
-    get_ffmpeg_path,
-    get_ffprobe_path,
-    get_flux_path,
-    get_mkvmerge_path,
-    get_mkvpropedit_path,
-    get_velora_path,
-)
+from VibraVid.setup.dependencies import dependency_report
 from VibraVid.tui import bridge
 from VibraVid.tui.i18n import t
 from VibraVid.tui.widgets.custom_footer import CustomFooter
@@ -119,23 +110,10 @@ class SystemScreen(Screen):
         table = self.query_one("#deps-table", DataTable)
         table.clear()
 
-        deps: list[tuple[str, str]] = [
-            ("FFmpeg", get_ffmpeg_path()),
-            ("FFprobe", get_ffprobe_path()),
-            ("flux", get_flux_path()),
-            ("dovi_tool", get_dovi_tool_path()),
-            ("mkvmerge", get_mkvmerge_path()),
-            ("mkvpropedit", get_mkvpropedit_path()),
-            ("Velora", get_velora_path()),
-        ]
-
-        for dep_name, dep_path in deps:
-            is_ok = bool(dep_path and os.path.exists(dep_path))
-            status_str = "[green]OK[/]" if is_ok else "[red]Missing[/]"
-            version = _probe_binary_version(dep_name, dep_path) if is_ok else ""
-            version_str = f"v{version}" if version else "-"
-            path_str = dep_path if is_ok else "Not found"
-            table.add_row(dep_name, status_str, version_str, path_str)
+        for dep in dependency_report():
+            status_str = "[green]OK[/]" if dep["found"] else "[red]Missing[/]"
+            version_str = f"v{dep['version']}" if dep["version"] else "-"
+            table.add_row(dep["name"], status_str, version_str, dep["path"] or "Not found")
 
     def _load_drm_status(self) -> None:
         box = self.query_one("#drm-box", Vertical)

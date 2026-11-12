@@ -103,8 +103,8 @@ def normalize_timestamps(src_path: Path, log: logging.Logger | None = None, flux
         log.error(f"[normalize] timestamp normalization failed (rc={result.returncode}): {(result.stderr or '')[-400:]}")
         try:
             norm_path.unlink(missing_ok=True)
-        except Exception:
-            pass
+        except OSError as exc:
+            logger.debug("Could not remove a temporary path: %s", exc)
         return None
 
     return norm_path

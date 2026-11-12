@@ -3,9 +3,11 @@
 import logging
 import os
 import time
+from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings
+from django.db import DatabaseError
 
 from VibraVid.utils import config_manager
 
@@ -62,4 +64,23 @@ def purge_old_logs(days: int | None = None) -> int:
                 logger.debug("Log '%s' not removed: %s", path, exc)
     if removed:
         logger.info("Removed %d log file(s) older than %d day(s)", removed, days)
+    return removed
+
+
+def purge_old_webhook_events(days: int | None = None) -> int:
+    from django.utils import timezone
+
+    from .models import ArrWebhookEvent
+
+    days = retention_days() if days is None else days
+    if days <= 0:
+        return 0
+    cutoff = timezone.now() - timedelta(days=days)
+    try:
+        removed, _ = ArrWebhookEvent.objects.filter(received_at__lt=cutoff).delete()
+    except DatabaseError as exc:
+        logger.warning("ARR webhook events not purged: %s", exc)
+        return 0
+    if removed:
+        logger.info("Removed %d ARR webhook event(s) older than %d day(s)", removed, days)
     return removed

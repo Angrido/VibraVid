@@ -80,6 +80,24 @@ def test_purge_old_logs_keeps_recent_and_active_files(tmp_path, monkeypatch):
     assert log_retention.purge_old_logs(0) == 0
 
 
+def test_purge_old_webhook_events_keeps_recent_ones():
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from searchapp.models import ArrWebhookEvent
+
+    call_command("migrate", verbosity=0, interactive=False)
+    ArrWebhookEvent.objects.all().delete()
+    old = ArrWebhookEvent.objects.create(raw_payload={"n": "old"})
+    recent = ArrWebhookEvent.objects.create(raw_payload={"n": "recent"})
+    ArrWebhookEvent.objects.filter(pk=old.pk).update(received_at=timezone.now() - timedelta(days=8))
+
+    assert log_retention.purge_old_webhook_events(0) == 0
+    assert log_retention.purge_old_webhook_events(7) == 1
+    assert list(ArrWebhookEvent.objects.values_list("pk", flat=True)) == [recent.pk]
+
+
 def test_retention_days_setting(monkeypatch):
     monkeypatch.setenv("LOG_RETENTION_DAYS", "3")
     assert log_retention.retention_days() == 3

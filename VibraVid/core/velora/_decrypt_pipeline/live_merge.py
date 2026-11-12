@@ -148,7 +148,7 @@ class _LiveMerger:
             try:
                 self._fh.close()
             except Exception:
-                pass
+                logger.debug("Ignored error in a best-effort step", exc_info=True)
 
     def __enter__(self) -> "_LiveMerger":
         return self

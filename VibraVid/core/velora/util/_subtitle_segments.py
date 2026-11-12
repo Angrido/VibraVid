@@ -3,6 +3,7 @@
 import gzip
 import logging
 import re
+import zlib
 from typing import Any
 from urllib.parse import urljoin
 
@@ -187,8 +188,8 @@ def _read_vtt_segment_text(path) -> str:
     if raw[:2] == b"\x1f\x8b":
         try:
             raw = gzip.decompress(raw)
-        except Exception:
-            pass
+        except (OSError, EOFError, zlib.error):
+            logger.debug("Ignored error in a best-effort step", exc_info=True)
     return raw.decode("utf-8", errors="replace")
 
 

@@ -172,6 +172,13 @@ def trigger_binaries_update(request: HttpRequest) -> JsonResponse:
     return JsonResponse({"success": True, "results": result})
 
 
+@require_http_methods(["GET"])
+def dependencies_status(request: HttpRequest) -> JsonResponse:
+    from VibraVid.setup.dependencies import dependency_report
+
+    return JsonResponse({"dependencies": dependency_report()})
+
+
 @require_http_methods(["POST"])
 @require_service_upload
 def refresh_external_import(request: HttpRequest) -> JsonResponse:
@@ -208,5 +215,5 @@ def trigger_update(request: HttpRequest) -> JsonResponse:
 __all__ = [
     'site_status',
     'registry_status', 'site_cli_options_schema', 'reload_config',
-    'check_updates', 'trigger_binaries_update', 'refresh_external_import', 'trigger_update',
+    'check_updates', 'trigger_binaries_update', 'dependencies_status', 'refresh_external_import', 'trigger_update',
 ]

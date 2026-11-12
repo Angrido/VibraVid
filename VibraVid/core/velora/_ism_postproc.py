@@ -203,8 +203,8 @@ class IsmPostprocMixin:
 
         try:
             encrypted_temp.unlink()
-        except Exception:
-            pass
+        except OSError as exc:
+            logger.debug("Could not remove a temporary path: %s", exc)
 
         if not (ok and out_path.exists() and out_path.stat().st_size > 0):
             logger.error("ISM post-processing decryption failed")

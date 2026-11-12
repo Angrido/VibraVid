@@ -109,8 +109,8 @@ class PostDownloadDecryptor:
         try:
             if os.path.exists(path):
                 os.remove(path)
-        except Exception:
-            pass
+        except OSError as exc:
+            logger.debug("Could not remove a temporary path: %s", exc)
 
     @staticmethod
     def _warn_if_kid_missing(kid: str, key: Any) -> None:

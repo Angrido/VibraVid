@@ -33,7 +33,7 @@ def _get_declared_xml_encoding(block: bytes) -> str | None:
         if match:
             return match.group(1).strip()
     except Exception:
-        pass
+        logger.debug("Ignored error in a best-effort step", exc_info=True)
     return None
 
 
@@ -245,7 +245,7 @@ def convert_ttml_to_format(
                     if match:
                         ttml_blocks = [match.group(0).encode("utf-8")]
             except Exception:
-                pass
+                logger.debug("Ignored error in a best-effort step", exc_info=True)
 
         if not ttml_blocks:
             console.print(f"[red]No valid TTML blocks found in {ttml_path}")

@@ -120,7 +120,9 @@ class DownloadTracker(metaclass=SingletonMeta):
                 return
             except Exception as exc:
                 logger.warning("Unable to save history to SQLite; using JSON fallback: %s", exc)
+        self._write_history_json()
 
+    def _write_history_json(self) -> None:
         try:
             path = self._history_file_path()
             os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -167,6 +169,7 @@ class DownloadTracker(metaclass=SingletonMeta):
                 "tasks": {},  # For multi-stream downloads (video, audio, etc)
                 "cli_search": context_tracker.cli_search,
                 "cli_item": context_tracker.cli_item,
+                "retry": context_tracker.retry_request,
             }
             hook_context = {
                 "download_id": download_id,
@@ -450,6 +453,35 @@ class DownloadTracker(metaclass=SingletonMeta):
             if self._django_enabled() and not self._history_loaded:
                 self._load_persisted_history()
             return list(reversed(self.history))
+
+    def take_retry_request(self, download_id: str, statuses: frozenset[str]) -> dict[str, Any] | None:
+        with self._lock:
+            if self._django_enabled() and not self._history_loaded:
+                self._load_persisted_history()
+            entry = next(
+                (item for item in reversed(self.history)
+                 if item.get("id") == download_id and item.get("retry") and item.get("status") in statuses),
+                None,
+            )
+            if entry is None:
+                return None
+            retry = entry.pop("retry")
+            self._forget_retry_in_store(download_id)
+            return retry
+
+    def _forget_retry_in_store(self, download_id: str) -> None:
+        model = self._get_history_model()
+        if model is None:
+            self._write_history_json()
+            return
+        try:
+            for row in model.objects.filter(download_id=download_id):
+                payload = json.loads(row.payload)
+                if payload.pop("retry", None) is not None:
+                    row.payload = json.dumps(payload)
+                    row.save(update_fields=["payload"])
+        except Exception as exc:
+            logger.warning("Unable to clear the retry request of history entry %s: %s", download_id, exc)
 
     def clear_history(self):
         """Clear all download history."""
@@ -835,6 +867,14 @@ class ContextTracker:
     @fallback_poster_url.setter
     def fallback_poster_url(self, value):
         self.local.fallback_poster_url = value
+
+    @property
+    def retry_request(self):
+        return getattr(self.local, "retry_request", None)
+
+    @retry_request.setter
+    def retry_request(self, value):
+        self.local.retry_request = value
 
     @property
     def series_tmdb_id(self):
