@@ -618,6 +618,7 @@
 				dot.classList.toggle("is-idle", !data.enabled);
 				if (!data.enabled) { el("cn-arr-state").textContent = "disabled"; return; }
 
+				el("cn-arr-sync").hidden = data.auto_download === false;
 				var on = [];
 				if (data.auto_download === false) {
 					on.push("manual only");
@@ -646,7 +647,10 @@
 		var btn = this;
 		btn.disabled = true;
 		post(URL_ARR_SYNC, null, false)
-			.then(function () { say(arrMsg, "Sync started.", "good"); })
+			.then(function (data) {
+				if (data.status === "ok") say(arrMsg, "Sync started.", "good");
+				else say(arrMsg, "Not started: " + (data.message || "unknown error"), "bad");
+			})
 			.catch(function (err) { say(arrMsg, "Not started: " + err.message, "bad"); })
 			.finally(function () {
 				setTimeout(function () { btn.disabled = false; arrStatus(); }, 3000);

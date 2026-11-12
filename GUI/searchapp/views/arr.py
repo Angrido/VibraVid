@@ -535,11 +535,16 @@ def arr_trigger_sync(request: HttpRequest) -> JsonResponse:
     POST /api/arr/trigger-sync/
     """
     try:
-        from ..arr.arr_service import _load_arr_config, trigger_polling_sync
+        from ..arr.arr_service import _load_arr_config, automatic_downloads_enabled, trigger_polling_sync
 
         cfg = _load_arr_config()
         if not cfg.get("enabled"):
             return JsonResponse({"status": "disabled", "message": "ARR services are disabled"})
+        if not automatic_downloads_enabled(cfg):
+            return JsonResponse({
+                "status": "disabled",
+                "message": "Automatic downloads are off. Pick what to download from Missing from library.",
+            })
 
         def _async_sync():
             try:
