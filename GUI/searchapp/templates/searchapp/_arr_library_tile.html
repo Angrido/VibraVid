@@ -1,5 +1,6 @@
-<a class="cn-tile lib-tile" href="{% if card.kind == 'movie' %}{% url 'arr_movie_detail' card.id %}{% else %}{% url 'arr_series_detail' card.id %}{% endif %}"
-   data-lib-item data-missing="{{ card.missing }}" data-title="{{ card.title|lower }}">
+<div class="lib-item" data-lib-item data-missing="{{ card.missing }}" data-title="{{ card.title|lower }}"
+     data-lib-key="{{ card.kind }}:{{ card.id }}" data-lib-lang="{{ card.lang.tone|default:'' }}">
+<a class="cn-tile lib-tile" href="{% if card.kind == 'movie' %}{% url 'arr_movie_detail' card.id %}{% else %}{% url 'arr_series_detail' card.id %}{% endif %}">
 	<span class="cn-poster">
 		{% if card.poster %}<img src="{{ card.poster }}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" width="200" height="300" onerror="this.remove()">{% endif %}
 		<span class="cn-poster-fill"><span class="cn-rule"></span><span class="cn-ptitle" data-no-tr>{{ card.title }}</span></span>
@@ -11,3 +12,11 @@
 		<span class="cn-sub">{% if card.year %}<span class="cn-num">{{ card.year }}</span>{% endif %}{% if card.kind == "serie" %}{% if card.year %} · {% endif %}<span class="cn-num">{{ card.have }}/{{ card.aired }}</span> <span>episodes</span>{% elif card.runtime %}{% if card.year %} · {% endif %}<span class="cn-num">{{ card.runtime }}</span> <span>min</span>{% endif %}</span>
 	</span>
 </a>
+{% if card.missing %}
+	<div class="lib-lang">
+		<span class="cn-st lib-lang-st {% if card.lang.tone == 'good' %}is-done{% elif card.lang.tone == 'warn' %}is-warn{% elif card.lang.tone == 'bad' %}is-dead{% else %}is-wait{% endif %}" data-lib-lang-badge><span>{% if card.lang %}{{ card.lang.label }}{% else %}Not checked{% endif %}</span>{% if card.lang.count %} <span class="cn-num">{{ card.lang.count }}</span>{% endif %}</span>
+		<button class="cn-opt lib-lang-btn" type="button" data-lib-check="{% if card.kind == 'movie' %}movie{% else %}series{% endif %}" data-lib-id="{{ card.id }}"
+		        aria-label="Check Italian audio: {{ card.title }}">Check</button>
+	</div>
+{% endif %}
+</div>
