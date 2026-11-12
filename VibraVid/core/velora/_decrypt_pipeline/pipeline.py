@@ -20,6 +20,7 @@ from ..util._stream_helpers import (
     collect_failed_segments,
     detect_seg_ext,
     merged_segment_ext,
+    token_refresh_backoff,
 )
 from ..util._subtitle_segments import merge_vtt_files
 from ..util.formatting import format_size as _fmt_size
@@ -432,7 +433,7 @@ class DecryptPipelineMixin(
                 rounds += 1
 
                 if TOKEN_REFRESH_BACKOFF_SECONDS > 0:
-                    backoff = min(TOKEN_REFRESH_BACKOFF_SECONDS * rounds, 20.0)
+                    backoff = token_refresh_backoff(TOKEN_REFRESH_BACKOFF_SECONDS, rounds)
                     logger.info(f"Token refresh round {rounds}: waiting {backoff:.1f}s before retrying (transient CDN errors often clear up on their own)")
                     self._interruptible_sleep(backoff)
                     if self._stop_check():

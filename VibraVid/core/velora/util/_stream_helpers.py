@@ -226,6 +226,10 @@ def collect_failed_segments(dl_segs: list, downloaded_paths: list, stream_dir, d
     return failed
 
 
+def token_refresh_backoff(base_seconds: float, round_number: int, cap_seconds: float = 60.0) -> float:
+    return min(base_seconds * 2 ** (round_number - 1), cap_seconds)
+
+
 def build_retry_segments(failed_numbers: list, seg_by_number: dict, fresh_map: dict) -> list:
     """
     Build the segments to retry after a failed download round.
