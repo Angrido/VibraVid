@@ -72,7 +72,8 @@ def _fetch_one(task: dict[str, Any], plan: dict[str, Any], limiter: _RateLimiter
                 response = client.get(url, headers=headers, timeout=timeout, stream=True)
                 try:
                     response.raise_for_status()
-                    expected_length = response.headers.get("content-length")
+                    if response.headers.get("content-encoding", "identity").lower() == "identity":
+                        expected_length = response.headers.get("content-length")
                     with open(path, "wb") as f:
                         for chunk in response.iter_content(chunk_size=65536):
                             if not chunk:

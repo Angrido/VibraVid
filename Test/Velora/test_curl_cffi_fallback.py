@@ -1,6 +1,7 @@
 # 26.09.26
 # ruff: noqa: E402
 
+import gzip
 import sys
 import tempfile
 import threading
@@ -187,8 +188,41 @@ def test_errors_are_forwarded_to_event_cb():
         thread.join(timeout=5)
 
 
+class _GzipHandler(BaseHTTPRequestHandler):
+    def do_GET(self):  # noqa: N802
+        body = gzip.compress(SEGMENT_BODY * 100)
+        self.send_response(200)
+        self.send_header("Content-Encoding", "gzip")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format, *args):  # noqa: A002
+        pass
+
+
+def test_gzip_encoded_segment_is_recovered_whole():
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _GzipHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        base_url = f"http://127.0.0.1:{server.server_port}"
+        with tempfile.TemporaryDirectory() as tmp:
+            tasks = _make_tasks(base_url, Path(tmp), count=2)
+            plan = {"headers": {"Accept-Encoding": "gzip, deflate"}, "retry_count": 0, "timeout_seconds": 5.0}
+
+            recovered = _run_curl_cffi_fallback(tasks, plan, 0, 0, 2, None, None, None)
+
+            assert len(recovered) == 2
+            assert [p.read_bytes() for p in recovered] == [SEGMENT_BODY * 100] * 2
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
 if __name__ == "__main__":
     test_stop_check_interrupts_in_flight_fallback()
     test_progress_offset_never_goes_backwards()
     test_errors_are_forwarded_to_event_cb()
+    test_gzip_encoded_segment_is_recovered_whole()
     print("All tests passed.")
