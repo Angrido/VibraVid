@@ -22,6 +22,7 @@ from .item_log import item_log
 
 logger = logging.getLogger("ARR")
 _ARR_SEARCH_TIMEOUT = 45
+_IDENTITY_LOOKUP_WORKERS = 8
 
 
 class ArrDownloaderService:
@@ -36,6 +37,7 @@ class ArrDownloaderService:
         self.sonarr = sonarr
         self.radarr = radarr
         self.last_error: str | None = None
+        self.series_only_match: dict[str, str] | None = None
         self.download_timeout = self._load_download_timeout()
         self._sonarr_season_format: str | None = None
         self._provider_tmdb_cache: dict[tuple, str] = {}
@@ -69,6 +71,7 @@ class ArrDownloaderService:
             return False
 
     def locate(self, item: dict, season_num: int | None = None, ep_num: int | None = None) -> tuple[dict[str, Any] | None, str]:
+        self.series_only_match = None
         media_type = "movie" if item.get("content_type") == "movie" else "tv"
         tmdb_id = self._resolve_request_tmdb_id(item, media_type)
         resolve_titles = self._resolve_radarr_title if media_type == "movie" else self._resolve_sonarr_title
@@ -1028,6 +1031,72 @@ class ArrDownloaderService:
                 raw_data["tmdb_id"] = resolved
         return resolved
 
+    def _identity_rejection(
+        self, api: Any, result: Any, provider: str, media_type: str, title: str, expected_tmdb: str,
+        imdb_id: str | None, tvdb_id: str | None,
+    ) -> str | None:
+        r_name = result.name or ""
+        result_tmdb = self._resolve_provider_tmdb_id(api, result, provider, media_type)
+        if not result_tmdb:
+            if not self._titles_plausible(title, r_name):
+                logger.debug(
+                    f"[title_check] SKIP '{r_name}' ({result.year}) — provider cannot attest a TMDB id "
+                    f"and the title is too different from '{title}'"
+                )
+                return "title mismatch"
+            result_tmdb = self._resolve_provider_tmdb_id_via_request_external_id(
+                result, media_type, imdb_id=imdb_id, tvdb_id=tvdb_id
+            )
+        if not result_tmdb:
+            logger.debug(f"[tmdb_check] SKIP '{r_name}' ({result.year}) — provider cannot attest a TMDB id")
+            return "no tmdb id"
+        if result_tmdb != expected_tmdb:
+            logger.debug(
+                f"[tmdb_check] SKIP '{r_name}' ({result.year}) — {media_type} tmdb_id mismatch: "
+                f"got={result_tmdb} expected={expected_tmdb}"
+            )
+            return "tmdb_id mismatch"
+        logger.info(f"[tmdb_check] MATCH '{r_name}' ({result.year}) — identity=({media_type}, {result_tmdb})")
+        return None
+
+    def _first_identity_match(
+        self, api: Any, candidates: list, provider: str, media_type: str, title: str, expected_tmdb: str,
+        rejected: dict[str, int], imdb_id: str | None = None, tvdb_id: str | None = None,
+    ) -> Any:
+        if not candidates:
+            return None
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=_IDENTITY_LOOKUP_WORKERS)
+        try:
+            verdicts = [
+                pool.submit(
+                    self._identity_rejection, api, r, provider, media_type, title, expected_tmdb, imdb_id, tvdb_id
+                )
+                for r in candidates
+            ]
+            for result, verdict in zip(candidates, verdicts, strict=True):
+                reason = verdict.result()
+                if reason is None:
+                    return result
+                rejected[reason] = rejected.get(reason, 0) + 1
+            return None
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
+
+    @staticmethod
+    def _episode_count(result: Any) -> int | None:
+        raw_data = getattr(result, "raw_data", None)
+        count = raw_data.get("episodes_count") if isinstance(raw_data, dict) else None
+        try:
+            return int(count)
+        except (TypeError, ValueError):
+            return None
+
+    @classmethod
+    def _same_title_ignoring_dub(cls, title: str, result_name: str) -> bool:
+        stripped = re.sub(r"\(ita\)", " ", result_name, flags=re.IGNORECASE)
+        normalized = cls._normalize_title(title)
+        return bool(normalized) and normalized == cls._normalize_title(stripped)
+
     def _resolve_provider_tmdb_id_via_request_external_id(
         self, result: Any, media_type: str, imdb_id: str | None = None, tvdb_id: str | None = None
     ) -> str | None:
@@ -1369,47 +1438,34 @@ class ArrDownloaderService:
                         logger.info(f"[split_cour] absolute episode {episode_number} of S{season_int} -> '{strict_candidates[0].name}' local episode {split_cour_local_episode}")
 
                 rejected: dict[str, int] = {}
+                same_type_candidates = []
+                single_episode_movie = None
                 for r in strict_candidates:
-                    r_name = r.name or ""
-                    r_year = r.year or ""
                     result_media_type = self._result_media_type(r)
-                    if result_media_type != media_type:
-                        rejected["type mismatch"] = rejected.get("type mismatch", 0) + 1
-                        logger.debug(
-                            f"[type_check] SKIP '{r_name}' ({r_year}) — provider type={result_media_type or 'unknown'} "
-                            f"cannot satisfy TMDB type={media_type}"
-                        )
+                    if result_media_type == media_type:
+                        same_type_candidates.append(r)
                         continue
-
-                    result_tmdb = self._resolve_provider_tmdb_id(api, r, provider, media_type)
-                    if not result_tmdb:
-                        # The request's own id is only lent to this result, so it proves nothing
-                        # about identity: the title has to vouch for it.
-                        if not self._titles_plausible(title, r_name):
-                            rejected["title mismatch"] = rejected.get("title mismatch", 0) + 1
-                            logger.debug(
-                                f"[title_check] SKIP '{r_name}' ({r_year}) — provider cannot attest a TMDB id "
-                                f"and the title is too different from '{title}'"
-                            )
-                            continue
-
-                        result_tmdb = self._resolve_provider_tmdb_id_via_request_external_id(
-                            r, media_type, imdb_id=imdb_id, tvdb_id=tvdb_id
-                        )
-
-                    if not result_tmdb:
-                        rejected["no tmdb id"] = rejected.get("no tmdb id", 0) + 1
-                        logger.debug(f"[tmdb_check] SKIP '{r_name}' ({r_year}) — provider cannot attest a TMDB id")
+                    rejected["type mismatch"] = rejected.get("type mismatch", 0) + 1
+                    logger.debug(
+                        f"[type_check] SKIP '{r.name}' ({r.year}) — provider type={result_media_type or 'unknown'} "
+                        f"cannot satisfy TMDB type={media_type}"
+                    )
+                    if media_type != "movie" or not self._same_title_ignoring_dub(title, r.name or ""):
                         continue
+                    if self._episode_count(r) == 1:
+                        single_episode_movie = single_episode_movie or r
+                    elif self.series_only_match is None:
+                        self.series_only_match = {"provider": provider, "match": r.name}
 
-                    if result_tmdb != expected_tmdb_str:
-                        rejected["tmdb_id mismatch"] = rejected.get("tmdb_id mismatch", 0) + 1
-                        logger.debug(f"[tmdb_check] SKIP '{r_name}' ({r_year}) — {media_type} tmdb_id mismatch: got={result_tmdb} expected={expected_tmdb_str}")
-                        continue
-
-                    best = r
-                    logger.info(f"[tmdb_check] MATCH '{r_name}' ({r_year}) — identity=({media_type}, {result_tmdb})")
-                    break
+                best = self._first_identity_match(
+                    api, same_type_candidates, provider, media_type, title, expected_tmdb_str, rejected,
+                    imdb_id=imdb_id, tvdb_id=tvdb_id,
+                )
+                if best is None and single_episode_movie is not None:
+                    best = single_episode_movie
+                    logger.info(
+                        f"[type_check] MATCH '{best.name}' — single-episode {best.type} entry with the exact movie title"
+                    )
 
                 if rejected:
                     reasons = ", ".join(f"{count} {reason}" for reason, count in rejected.items())
