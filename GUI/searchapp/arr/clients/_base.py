@@ -87,10 +87,6 @@ class ArrClient:
             return connection_problem(exc)
         return ""
 
-    def is_available(self) -> bool:
-        """Return True if the server is reachable."""
-        return not self.connection_problem()
-
     # ── config ───────────────────────────────────────────
     def get_naming_config(self) -> dict[str, Any]:
         """Get the naming/folder-format configuration."""
@@ -114,7 +110,13 @@ class ArrClient:
 
     # ── queue ────────────────────────────────────────────
     def queue(self) -> dict[str, Any]:
-        return self._get("/queue", params={**self.queue_params, "pageSize": QUEUE_PAGE_SIZE}).json()
+        records: list[dict[str, Any]] = []
+        for page in count(1):
+            data = self._get("/queue", params={**self.queue_params, "page": page, "pageSize": QUEUE_PAGE_SIZE}).json()
+            batch = data.get("records", [])
+            records.extend(batch)
+            if not batch or len(records) >= data.get("totalRecords", 0):
+                return {"records": records}
 
     # ── tags ─────────────────────────────────────────────
     def get_tags(self) -> list[dict[str, Any]]:

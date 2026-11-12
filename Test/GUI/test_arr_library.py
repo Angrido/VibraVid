@@ -29,25 +29,19 @@ POSTER = {"coverType": "poster", "remoteUrl": "https://img.example/poster.jpg"}
 FANART = {"coverType": "fanart", "remoteUrl": "https://img.example/fanart.jpg"}
 
 
-def _not_found():
+def _http_error(status):
     response = requests.Response()
-    response.status_code = 404
-    return requests.HTTPError(response=response)
-
-
-def _rejected_key():
-    response = requests.Response()
-    response.status_code = 401
+    response.status_code = status
     return requests.HTTPError(response=response)
 
 
 class FakeSonarr:
     label = "Sonarr"
-    down = False
+    down = None
 
     def get_series(self):
         if self.down:
-            raise self.down if isinstance(self.down, Exception) else requests.ConnectionError("refused")
+            raise self.down
         return [
             {"id": 7, "title": "Zeta Show", "year": 2020, "monitored": True, "images": [POSTER], "added": "2024-05-01T10:00:00Z",
              "statistics": {"episodeCount": 4, "episodeFileCount": 1, "seasonCount": 2, "sizeOnDisk": 2048}},
@@ -57,7 +51,7 @@ class FakeSonarr:
 
     def get_series_by_id(self, series_id):
         if series_id != 7:
-            raise _not_found()
+            raise _http_error(404)
         return {**self.get_series()[0], "overview": "A show.", "images": [POSTER, FANART], "network": "HBO", "status": "continuing"}
 
     def get_episodes_for_series(self, series_id):
@@ -84,7 +78,7 @@ class FakeRadarr:
     def get_movie_by_id(self, movie_id):
         movie = next((m for m in self.get_movies() if m["id"] == movie_id), None)
         if movie is None:
-            raise _not_found()
+            raise _http_error(404)
         return {**movie, "overview": "A movie.", "studio": "Studio X"}
 
 
@@ -129,11 +123,11 @@ def test_library_lists_titles_sorted_with_their_state(arr):
 
 
 def test_library_keeps_radarr_when_sonarr_does_not_answer(arr):
-    arr["sonarr"].down = True
+    arr["sonarr"].down = requests.ConnectionError("refused")
 
     library = library_service.scan_library()
 
-    assert library["unreachable"] == ["Sonarr"] and library["series"] == []
+    assert library["problems"] == {"Sonarr": "unreachable"} and library["series"] == []
     assert len(library["movies"]) == 3
 
 
@@ -221,14 +215,22 @@ def test_title_pages_trust_sonarr_and_radarr_over_an_old_queue_state(arr):
 
 
 def test_library_tells_a_rejected_api_key_from_a_server_that_does_not_answer(client, arr):
-    arr["sonarr"].down = _rejected_key()
+    arr["sonarr"].down = _http_error(401)
 
     library = library_service.scan_library()
     page = client.get("/arr/").content.decode()
 
-    assert library["unreachable"] == ["Sonarr"] and library["unauthorized"] == ["Sonarr"]
+    assert library["problems"] == {"Sonarr": "unauthorized"}
     assert len(library["movies"]) == 3
     assert "Sonarr rejected the API key" in page and "did not answer" not in page
+
+
+def test_title_page_says_when_the_api_key_is_rejected(client, arr):
+    arr["sonarr"].get_series_by_id = lambda series_id: (_ for _ in ()).throw(_http_error(401))
+
+    page = client.get("/arr/series/7/").content.decode()
+
+    assert "rejected the API key" in page and "did not answer" not in page
 
 
 def test_library_tiles_carry_what_sorting_needs(client, arr):

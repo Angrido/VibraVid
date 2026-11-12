@@ -45,10 +45,11 @@ def _queue_states(keys: list[str]) -> dict[str, dict[str, str]]:
     from searchapp.models import ArrProcessingQueue
 
     entries = ArrProcessingQueue.objects.filter(dedup_key__in=keys).select_related("media_request")
-    return {
+    queued = {
         entry.dedup_key: {"state": entry.media_request.status, "reason": entry.media_request.failure_reason}
         for entry in entries
     }
+    return {key: queued.get(key, NOT_QUEUED) for key in keys}
 
 
 def _keys_with_file(keys: list[str]) -> set[str]:
@@ -89,16 +90,8 @@ def scan_missing() -> dict[str, Any]:
     sonarr, radarr = _build_clients(cfg)
     clients = [client for client in (sonarr, radarr) if client]
     problems = {client.label: client.connection_problem() for client in clients}
-    reachable = {label for label, problem in problems.items() if not problem}
-    items = (
-        _missing_items(
-            cfg,
-            sonarr if sonarr and sonarr.label in reachable else None,
-            radarr if radarr and radarr.label in reachable else None,
-        )
-        if reachable
-        else []
-    )
+    usable = [client if client and not problems[client.label] else None for client in (sonarr, radarr)]
+    items = _missing_items(cfg, *usable) if any(usable) else []
 
     series = sorted((i for i in items if i["content_type"] == "serie"), key=lambda i: i["title"].lower())
     movies = sorted((i for i in items if i["content_type"] == "movie"), key=lambda i: i["title"].lower())
@@ -115,12 +108,11 @@ def scan_missing() -> dict[str, Any]:
             serie["episode_count"] += len(season["episodes"])
     states = _queue_states([row["queue_key"] for row in rows])
     for row in rows:
-        row.update(states.get(row["queue_key"], NOT_QUEUED))
+        row.update(states[row["queue_key"]])
 
     return {
         "configured": bool(clients),
-        "unreachable": [label for label, problem in problems.items() if problem],
-        "unauthorized": [label for label, problem in problems.items() if problem == "unauthorized"],
+        "problems": {label: problem for label, problem in problems.items() if problem},
         "polling_active": bool(cfg.get("enabled") and cfg.get("enable_polling") and automatic_downloads_enabled(cfg)),
         "series": series,
         "movies": movies,

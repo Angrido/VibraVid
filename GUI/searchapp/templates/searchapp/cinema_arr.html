@@ -148,7 +148,7 @@
 
 								<td>
 									<span class="cn-acts">
-										{% if item.status == "failed" or item.status == "import_pending" %}
+										{% if item.retryable %}
 											<button class="cn-cta is-ghost cn-arr-retry" type="button"
 											        data-url="{% url 'arr_retry_request' entry.id %}">Retry</button>
 										{% endif %}
@@ -256,6 +256,20 @@
 			});
 	}
 
+	function postTo(url) {
+		return fetch(url, {
+			method: "POST",
+			headers: { "X-CSRFToken": "{{ csrf_token }}" }
+		}).then(function (r) {
+			return r.json().then(function (data) {
+				if (!r.ok || data.status === "error") {
+					throw new Error(data.message || "Request failed.");
+				}
+				return data;
+			});
+		});
+	}
+
 	function deleteRequest(del) {
 		var title = del.dataset.title || "this request";
 		if (!window.confirm(
@@ -269,18 +283,7 @@
 		del.disabled = true;
 		say("Deleting…");
 
-		fetch(del.dataset.url, {
-			method: "POST",
-			headers: { "X-CSRFToken": "{{ csrf_token }}" }
-		})
-			.then(function (r) {
-				return r.json().then(function (data) {
-					if (!r.ok || data.status === "error") {
-						throw new Error(data.message || "delete failed");
-					}
-					return data;
-				});
-			})
+		postTo(del.dataset.url)
 			.then(function () {
 				say("Request deleted.", "good");
 				refresh();
@@ -295,18 +298,7 @@
 		retry.disabled = true;
 		say("Sending to the download queue...");
 
-		fetch(retry.dataset.url, {
-			method: "POST",
-			headers: { "X-CSRFToken": "{{ csrf_token }}" }
-		})
-			.then(function (r) {
-				return r.json().then(function (data) {
-					if (!r.ok || data.status === "error") {
-						throw new Error(data.message || "Request failed.");
-					}
-					return data;
-				});
-			})
+		postTo(retry.dataset.url)
 			.then(function (data) {
 				say(data.message, "good");
 				refresh();

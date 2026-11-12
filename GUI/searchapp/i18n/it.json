@@ -526,6 +526,8 @@
   "The download did not complete. Details are in the logs.": "Il download non è stato completato. I dettagli sono nei log.",
   "Queued again. The list updates by itself.": "Rimesso in coda. L'elenco si aggiorna da solo.",
   "Already queued or downloading.": "Già in coda o in download.",
+  "Only a failed download can be retried.": "Si può riprovare solo un download fallito.",
+  "Sonarr or Radarr rejected the API key. Copy the key again and save it in the ARR settings.": "Sonarr o Radarr hanno rifiutato l'API key. Copia di nuovo la chiave e salvala nelle impostazioni ARR.",
   "This request cannot be retried from here. Pick it in Missing from library.": "Questa richiesta non può essere riprovata da qui. Sceglila in Mancanti in libreria.",
   "Sonarr or Radarr no longer lists it as missing, so there is nothing to retry.": "Sonarr o Radarr non lo elencano più come mancante, quindi non c'è nulla da riprovare.",
   "ARR queue entry not found": "Voce della coda ARR non trovata",

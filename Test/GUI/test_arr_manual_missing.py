@@ -29,11 +29,10 @@ from searchapp.models import ArrMediaRequest, ArrProcessingQueue
 class FakeSonarr:
     label = "Sonarr"
 
-    def __init__(self, available=True):
-        self.available = available
+    problem = ""
 
     def connection_problem(self):
-        return "" if self.available is True else self.available or "unreachable"
+        return self.problem
 
     def get_tags_map(self):
         return {}
@@ -102,16 +101,16 @@ def test_scan_groups_missing_episodes_and_movies_with_queue_state(arr):
     assert [e["state"] for e in episodes] == ["", "downloading"]
     assert serie["episode_count"] == 2 and scan["episode_total"] == 2
     assert [m["title"] for m in scan["movies"]] == ["Alpha Movie"]
-    assert scan["unreachable"] == [] and scan["polling_active"] is False
+    assert scan["problems"] == {} and scan["polling_active"] is False
 
 
 def test_scan_reports_an_unreachable_server_and_keeps_the_other(arr):
     clients, _ = arr
-    clients["sonarr"].available = False
+    clients["sonarr"].problem = "unreachable"
 
     scan = manual_service.scan_missing()
 
-    assert scan["unreachable"] == ["Sonarr"]
+    assert scan["problems"] == {"Sonarr": "unreachable"}
     assert scan["series"] == [] and len(scan["movies"]) == 1
 
 
@@ -336,12 +335,12 @@ def test_states_endpoint_keeps_the_queue_state_when_arr_does_not_answer(client, 
 
 def test_scan_tells_a_rejected_api_key_from_a_server_that_does_not_answer(client, arr):
     clients, _ = arr
-    clients["sonarr"].available = "unauthorized"
+    clients["sonarr"].problem = "unauthorized"
 
     scan = manual_service.scan_missing()
     page = client.get("/arr-missing/").content.decode()
 
-    assert scan["unreachable"] == ["Sonarr"] and scan["unauthorized"] == ["Sonarr"]
+    assert scan["problems"] == {"Sonarr": "unauthorized"}
     assert "Sonarr rejected the API key" in page and "did not answer" not in page
 
 

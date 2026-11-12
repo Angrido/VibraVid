@@ -19,11 +19,11 @@
 			<a class="cn-cta" href="{% url 'settings_editor' %}">Open settings</a>
 		</div>
 	</div>
-{% elif failed %}
+{% elif problem %}
 	<div class="cn-pad am-page" style="padding-top:34px">
 		<div class="am-state is-bad" role="alert">
 			<h2>This title could not be loaded</h2>
-			<p>Sonarr or Radarr did not answer. Check that it is running, then try again. Details are in the logs.</p>
+			<p>{% if problem == "unauthorized" %}Sonarr or Radarr rejected the API key. Copy the key again and save it in the ARR settings.{% else %}Sonarr or Radarr did not answer. Check that it is running, then try again. Details are in the logs.{% endif %}</p>
 			<span class="cn-acts">
 				<a class="cn-cta" href="{{ request.path }}">Try again</a>
 				<a class="cn-cta is-ghost" href="{% url 'arr_library' %}">Back to library</a>

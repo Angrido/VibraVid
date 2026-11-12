@@ -1,14 +1,16 @@
 # 12.11.26
 
 import logging
-from collections import Counter, defaultdict
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
 import requests
+from django.db.models import Count
 
 from .arr_service import _build_clients, _load_arr_config
 from .clients._base import connection_problem
+from .language_check import movie_key, serie_key
 from .manual_service import NOT_QUEUED, ArrNotConfigured, _queue_states
 from .processor_service import poster_url
 
@@ -82,24 +84,24 @@ def _by_title(cards: list[dict]) -> list[dict]:
     return sorted(cards, key=lambda card: card["title"].lower())
 
 
-def _cards(client, fetch: str, card) -> tuple[list[dict], str]:
+def _cards(client, fetch: str, card, problems: dict[str, str]) -> list[dict]:
     if not client:
-        return [], ""
+        return []
     try:
-        return _by_title(card(item) for item in getattr(client, fetch)()), ""
+        return _by_title(card(item) for item in getattr(client, fetch)())
     except requests.RequestException as exc:
-        return [], connection_problem(exc)
+        problems[client.label] = connection_problem(exc)
+        return []
 
 
 def scan_library() -> dict[str, Any]:
     sonarr, radarr = _build_clients(_load_arr_config())
-    series, sonarr_problem = _cards(sonarr, "get_series", _series_card)
-    movies, radarr_problem = _cards(radarr, "get_movies", _movie_card)
-    problems = {client.label: problem for client, problem in ((sonarr, sonarr_problem), (radarr, radarr_problem)) if problem}
+    problems: dict[str, str] = {}
+    series = _cards(sonarr, "get_series", _series_card, problems)
+    movies = _cards(radarr, "get_movies", _movie_card, problems)
     return {
         "configured": bool(sonarr or radarr),
-        "unreachable": list(problems),
-        "unauthorized": [label for label, problem in problems.items() if problem == "unauthorized"],
+        "problems": problems,
         "series": series,
         "movies": movies,
         "missing_episodes": sum(card["missing"] for card in series),
@@ -110,11 +112,17 @@ def scan_library() -> dict[str, Any]:
 def title_activity() -> dict[str, dict[str, int]]:
     from searchapp.models import ArrMediaRequest
 
-    counts: dict[str, Counter] = defaultdict(Counter)
-    requests_by_title = ArrMediaRequest.objects.filter(status__in=ACTIVITY_BY_STATUS).values_list("arr_source", "arr_id", "status")
-    for source, arr_id, status in requests_by_title:
-        counts[f"{'movie' if source == 'radarr' else 'serie'}:{arr_id}"][ACTIVITY_BY_STATUS[status]] += 1
-    return {title_key: dict(activity) for title_key, activity in counts.items()}
+    activity: dict[str, dict[str, int]] = defaultdict(dict)
+    counted = (
+        ArrMediaRequest.objects.filter(status__in=ACTIVITY_BY_STATUS)
+        .order_by()
+        .values_list("arr_source", "arr_id", "status")
+        .annotate(total=Count("pk"))
+    )
+    for source, arr_id, status, total in counted:
+        title_key = movie_key(arr_id) if source == "radarr" else serie_key(arr_id)
+        activity[title_key][ACTIVITY_BY_STATUS[status]] = total
+    return dict(activity)
 
 
 def _air_date(value: str | None) -> datetime | None:
@@ -161,7 +169,7 @@ def series_detail(series_id: int) -> dict[str, Any]:
         number = episode["seasonNumber"]
         season = seasons.setdefault(number, {"number": number, "episodes": [], "have": 0, "missing": 0})
         state = _episode_state(episode, monitored, now)
-        queued = NOT_QUEUED if state == "complete" else queue.get(keys[episode["id"]], NOT_QUEUED)
+        queued = NOT_QUEUED if state == "complete" else queue[keys[episode["id"]]]
         pickable = state == "missing" and number > 0
         season["episodes"].append(
             {
@@ -203,7 +211,7 @@ def movie_detail(movie_id: int) -> dict[str, Any]:
     movie = radarr.get_movie_by_id(movie_id)
     card = _movie_card(movie)
     key = f"radarr_{movie_id}"
-    queued = NOT_QUEUED if card["state"] == "complete" else _queue_states([key]).get(key, NOT_QUEUED)
+    queued = NOT_QUEUED if card["state"] == "complete" else _queue_states([key])[key]
     return {
         "item": {**card, **_details(movie), "queue": queued["state"], "reason": queued["reason"], "queue_key": key},
         "selectable": card["state"] == "missing" and queued["state"] not in BUSY_QUEUE_STATES,

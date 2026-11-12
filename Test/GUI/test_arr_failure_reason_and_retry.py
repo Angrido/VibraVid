@@ -17,7 +17,10 @@ import django
 
 django.setup()
 
+from importlib import import_module
+
 import pytest
+from django.apps import apps
 from django.core.management import call_command
 from django.test import Client
 from django.utils import timezone
@@ -96,8 +99,23 @@ def test_a_request_that_did_not_fail_has_no_failure_reason(status):
     assert ArrMediaRequest(status=status, last_error="search_no_results").failure_reason == ""
 
 
-def test_a_download_that_was_not_imported_says_so_even_when_it_predates_the_stored_reason():
-    assert ArrMediaRequest(status="import_pending").failure_reason == "Downloaded, but the file was not imported."
+def test_a_download_that_was_not_imported_says_so():
+    _request("radarr_31", ArrMediaRequest.Status.DOWNLOADING, closed=False)
+
+    arr_service._mark_failed(MOVIE, "Import not confirmed after 120s")
+
+    request = ArrMediaRequest.objects.get()
+    assert (request.status, request.last_error) == ("import_pending", "import_not_confirmed")
+    assert request.failure_reason == "Downloaded, but the file was not imported."
+
+
+def test_downloads_already_waiting_for_import_get_their_reason_when_updating():
+    _request("radarr_31", ArrMediaRequest.Status.IMPORT_PENDING)
+    _request("radarr_32", ArrMediaRequest.Status.FAILED)
+
+    import_module("searchapp.migrations.0012_arrmediarequest_last_error").explain_import_pending(apps, None)
+
+    assert list(ArrMediaRequest.objects.order_by("arr_id").values_list("last_error", flat=True)) == ["import_not_confirmed", ""]
 
 
 def test_queue_page_shows_the_reason_and_offers_retry_only_on_failed_rows(client):
@@ -127,10 +145,12 @@ def test_retry_queues_the_failed_movie_again(client, started):
     assert started == [({31}, set())]
 
 
-def test_retry_refuses_a_request_that_is_still_open(client, started):
-    entry = _request("radarr_31", ArrMediaRequest.Status.DOWNLOADING, closed=False)
+def test_retry_refuses_a_request_that_did_not_fail(client, started):
+    running = _request("radarr_31", ArrMediaRequest.Status.DOWNLOADING, closed=False)
+    done = _request("radarr_32", ArrMediaRequest.Status.COMPLETED)
 
-    assert client.post(f"/api/arr/queue/{entry.pk}/retry/").status_code == 409
+    assert client.post(f"/api/arr/queue/{running.pk}/retry/").status_code == 409
+    assert client.post(f"/api/arr/queue/{done.pk}/retry/").status_code == 409
     assert started == []
 
 

@@ -633,7 +633,7 @@ def arr_missing(request: HttpRequest) -> HttpResponse:
         scan_failed = False
     except Exception:
         logger.exception("Missing library scan failed")
-        scan, scan_failed = {"configured": True, "unreachable": [], "series": [], "movies": [], "episode_total": 0}, True
+        scan, scan_failed = {"configured": True, "problems": {}, "series": [], "movies": [], "episode_total": 0}, True
     return render(request, "searchapp/cinema_arr_missing.html", {"nav_active": "arr", "scan_failed": scan_failed, **scan})
 
 
@@ -666,10 +666,9 @@ def arr_retry_request(request: HttpRequest, queue_id: int) -> JsonResponse:
     entry = ArrProcessingQueue.objects.select_related("media_request").filter(pk=queue_id).first()
     if entry is None:
         return JsonResponse({"status": "error", "message": "ARR queue entry not found"}, status=404)
-    if not entry.completed_at:
-        return JsonResponse({"status": "error", "message": "Already queued or downloading."}, status=409)
-
     item = entry.media_request
+    if not item.retryable:
+        return JsonResponse({"status": "error", "message": "Only a failed download can be retried."}, status=409)
     movie_ids = {item.arr_id} if item.arr_source == "radarr" else set()
     episode_ids = {item.episode_id} if item.arr_source == "sonarr" and item.episode_id else set()
     if not movie_ids and not episode_ids:
@@ -692,7 +691,7 @@ def arr_retry_request(request: HttpRequest, queue_id: int) -> JsonResponse:
 
 @require_http_methods(["GET"])
 def arr_missing_states(request: HttpRequest) -> JsonResponse:
-    from ..arr.manual_service import NOT_QUEUED, live_queue_states
+    from ..arr.manual_service import live_queue_states
 
     keys = list(dict.fromkeys(key for key in request.GET.get("keys", "").split(",") if QUEUE_KEY.fullmatch(key)))
     if not keys or len(keys) > MAX_QUEUE_KEYS:
@@ -701,11 +700,8 @@ def arr_missing_states(request: HttpRequest) -> JsonResponse:
     return JsonResponse({
         "status": "ok",
         "states": {
-            key: {
-                "state": states.get(key, NOT_QUEUED)["state"],
-                "html": render_to_string("searchapp/_arr_missing_state.html", states.get(key, NOT_QUEUED)).strip(),
-            }
-            for key in keys
+            key: {"state": entry["state"], "html": render_to_string("searchapp/_arr_missing_state.html", entry).strip()}
+            for key, entry in states.items()
         },
     })
 
@@ -855,21 +851,19 @@ def arr_library_activity(request: HttpRequest) -> JsonResponse:
 def _arr_title_page(request: HttpRequest, load, arr_id: int) -> HttpResponse:
     import requests
 
+    from ..arr.clients._base import connection_problem
     from ..arr.manual_service import ArrNotConfigured
 
-    context = {"nav_active": "arr", "configured": True, "failed": False}
+    context = {"nav_active": "arr", "configured": True, "problem": ""}
     try:
         context.update(load(arr_id))
     except ArrNotConfigured:
         context["configured"] = False
-    except requests.HTTPError as exc:
-        if exc.response is not None and exc.response.status_code == 404:
+    except requests.RequestException as exc:
+        if getattr(exc.response, "status_code", None) == 404:
             raise Http404 from exc
         logger.exception("ARR title %s could not be loaded", arr_id)
-        context["failed"] = True
-    except requests.RequestException:
-        logger.exception("ARR title %s could not be loaded", arr_id)
-        context["failed"] = True
+        context["problem"] = connection_problem(exc)
     return render(request, "searchapp/cinema_arr_title.html", context)
 
 

@@ -121,10 +121,12 @@ class ArrMediaRequest(models.Model):
         return f"[{self.arr_source}] {self.title}{ep} ({self.status})"
 
     @property
+    def retryable(self) -> bool:
+        return self.status in (self.Status.FAILED, self.Status.IMPORT_PENDING)
+
+    @property
     def failure_reason(self) -> str:
-        if self.status == self.Status.IMPORT_PENDING:
-            return self.FAILURE_REASONS["import_not_confirmed"]
-        if self.status != self.Status.FAILED:
+        if not self.retryable:
             return ""
         return self.FAILURE_REASONS.get(self.last_error, self.FAILURE_REASONS["download_failed"])
 

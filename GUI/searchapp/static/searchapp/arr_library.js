@@ -56,7 +56,6 @@
 
     function apply() {
         if (!filter) return;
-        rememberView();
         const query = filter.value.trim().toLowerCase();
         let shown = 0;
         document.querySelectorAll("[data-lib-group]").forEach(group => {
@@ -77,17 +76,22 @@
         document.getElementById("lib-nomatch").hidden = shown > 0;
     }
 
+    function choose() {
+        rememberView();
+        apply();
+    }
+
     kinds.forEach(button => button.addEventListener("click", () => {
         setKind(button.dataset.libKind);
-        apply();
+        choose();
     }));
     toggles.forEach(toggle => toggle?.addEventListener("click", () => {
         toggle.setAttribute("aria-pressed", String(!pressed(toggle)));
-        apply();
+        choose();
     }));
     filter?.addEventListener("input", () => {
         clearTimeout(timer);
-        timer = setTimeout(apply, 120);
+        timer = setTimeout(choose, 120);
     });
     sort?.addEventListener("change", () => {
         sortTiles();
@@ -114,26 +118,35 @@
     let activityTimer = null;
     let activityBusy = false;
 
+    function fillBadge(badge, label, count) {
+        badge.replaceChildren(Object.assign(document.createElement("span"), {textContent: tr(label)}));
+        if (count) badge.append(" ", Object.assign(document.createElement("span"), {className: "cn-num", textContent: count}));
+    }
+
     function paintActivity(titles) {
         const landed = [];
         document.querySelectorAll("[data-lib-key]").forEach(item => {
             const counts = {...titles[item.dataset.libKey]};
             counts.failed = Math.min(counts.failed || 0, Number(item.dataset.missing));
-            const state = ["downloading", "queued", "failed"].find(name => counts[name]) || "";
+            const state = Object.keys(activityLook).find(name => counts[name]) || "";
             const busy = state === "downloading" || state === "queued";
             if (item.dataset.libBusy === "1" && !busy) landed.push(item.dataset.libKey);
             item.dataset.libBusy = busy ? "1" : "";
             const badge = item.querySelector("[data-lib-activity]");
+            const shown = state + ":" + (counts[state] || 0);
+            if (badge.dataset.shown === shown) return;
+            badge.dataset.shown = shown;
             badge.hidden = !state;
             if (!state) return;
             const [tone, label] = activityLook[state];
             badge.className = "cn-st " + tone;
-            badge.replaceChildren(Object.assign(document.createElement("span"), {textContent: tr(label)}));
-            if (counts[state] > 1) {
-                badge.append(" ", Object.assign(document.createElement("span"), {className: "cn-num", textContent: counts[state]}));
-            }
+            fillBadge(badge, label, counts[state] > 1 && counts[state]);
         });
         return landed;
+    }
+
+    function scheduleActivity() {
+        activityTimer = document.querySelector('[data-lib-busy="1"]') ? setTimeout(pollActivity, 4000) : null;
     }
 
     async function reloadTiles(keys) {
@@ -175,14 +188,14 @@
             apply();
         } catch (_) {}
         activityBusy = false;
-        activityTimer = document.querySelector('[data-lib-busy="1"]') ? setTimeout(pollActivity, 4000) : null;
+        scheduleActivity();
     }
 
     if (filter) {
         restoreView();
         paintActivity(JSON.parse(document.getElementById("lib-activity").textContent));
         apply();
-        if (document.querySelector('[data-lib-busy="1"]')) activityTimer = setTimeout(pollActivity, 4000);
+        scheduleActivity();
         document.addEventListener("visibilitychange", pollActivity);
         window.addEventListener("pageshow", event => { if (event.persisted) pollActivity(); });
     }
@@ -211,10 +224,7 @@
             const summary = titles[item.dataset.libKey];
             item.dataset.libLang = summary ? summary.tone : "";
             badge.className = "cn-st lib-lang-st " + (toneClass[summary?.tone] || "is-wait");
-            badge.replaceChildren(Object.assign(document.createElement("span"), {textContent: tr(summary ? summary.label : "Not checked")}));
-            if (summary?.count) {
-                badge.append(" ", Object.assign(document.createElement("span"), {className: "cn-num", textContent: summary.count}));
-            }
+            fillBadge(badge, summary ? summary.label : "Not checked", summary?.count);
             const link = item.querySelector("[data-lib-source]");
             const source = summary?.source;
             const valid = source && /^https?:\/\//i.test(source.url || "");

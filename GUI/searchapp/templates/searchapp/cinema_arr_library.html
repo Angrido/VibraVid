@@ -56,8 +56,8 @@
 			</div>
 		</section>
 
-		{% for label in unreachable %}
-			<p class="cn-msg is-bad" role="alert">{% if label in unauthorized %}{{ label }} rejected the API key, so its titles are not listed. Copy the key again from {{ label }} and save it in the ARR settings.{% else %}{{ label }} did not answer, so its titles are not listed. Check that it is running and that its URL in the ARR settings is right.{% endif %}</p>
+		{% for label, problem in problems.items %}
+			<p class="cn-msg is-bad" role="alert">{% if problem == "unauthorized" %}{{ label }} rejected the API key, so its titles are not listed. Copy the key again from {{ label }} and save it in the ARR settings.{% else %}{{ label }} did not answer, so its titles are not listed. Check that it is running and that its URL in the ARR settings is right.{% endif %}</p>
 		{% endfor %}
 
 		{% if series or movies %}
@@ -113,7 +113,7 @@
 			{% endif %}
 
 			<p class="cn-empty am-nomatch" id="lib-nomatch" role="status" hidden>No title matches these filters.</p>
-		{% elif not unreachable %}
+		{% elif not problems %}
 			<div class="am-state">
 				<h2>Nothing in Sonarr or Radarr yet</h2>
 				<p>Add a series in Sonarr or a movie in Radarr and it will show up here.</p>
