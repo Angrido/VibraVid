@@ -18,8 +18,9 @@
         if (!/\{\w+\}/.test(source)) { exact[source] = catalog[key]; return; }
         const names = [];
         const body = escapeRe(source).replace(/\\\{(\w+)\\\}/g, (_, name) => { names.push(name); return "(.+?)"; });
-        patterns.push({re: new RegExp("^" + body + "$"), names, out: catalog[key]});
+        patterns.push({re: new RegExp("^" + body + "$"), names, out: catalog[key], fixed: source.replace(/\{\w+\}/g, "").length});
     });
+    patterns.sort((a, b) => b.fixed - a.fixed);
 
     function translate(text) {
         if (typeof text !== "string" || !text) return text;
