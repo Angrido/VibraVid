@@ -134,3 +134,27 @@ def test_invalid_toml_error_does_not_echo_the_parser_message(monkeypatch, tmp_pa
     error = response.json()["error"]
     assert "zzzmarker" not in error and "line" not in error.lower() and "column" not in error.lower()
     assert cfg.read_text(encoding="utf-8") == "[DEFAULT]\n"  # nothing was written
+
+
+@pytest.mark.parametrize("path", ["/api/bot/sites/", "/api/bot/status/", "/api/bot/logs/"])
+def test_bot_api_needs_login_or_secret_when_login_is_on_and_no_secret_is_set(auth_on, monkeypatch, path):
+    monkeypatch.delenv("VIBRAVID_BOT_SECRET", raising=False)
+    client = Client()
+    assert _get(client, path).status_code == 401
+    client.post("/login/", {"username": "admin", "password": "s3cret"}, HTTP_HOST="127.0.0.1")
+    assert _get(client, path).status_code == 200
+
+
+def test_bot_download_is_not_reachable_without_login_or_secret(auth_on, monkeypatch):
+    monkeypatch.delenv("VIBRAVID_BOT_SECRET", raising=False)
+    response = Client().post("/api/bot/download/", data=json.dumps({"site": "x", "payload": {"name": "y"}}),
+                             content_type="application/json", HTTP_HOST="127.0.0.1")
+    assert response.status_code == 401
+
+
+def test_webhook_without_secret_is_refused_when_login_is_on(auth_on, monkeypatch):
+    from searchapp.arr import arr_service
+
+    monkeypatch.setattr(arr_service, "_load_arr_config", lambda: {"enabled": True, "enable_radarr_webhook": True})
+    response = Client().post("/api/arr/webhook/radarr/", data="{}", content_type="application/json", HTTP_HOST="127.0.0.1")
+    assert response.status_code == 403

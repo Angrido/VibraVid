@@ -18,12 +18,11 @@ EXEMPT_PREFIXES = (
     "/static/",
     "/login/",
     "/api/arr/webhook/",
-    "/api/bot/",
     "/api/remote/",
 )
 
 # Used by the Telegram sidecar, which authenticates with X-VibraVid-Token instead of a session.
-BOT_TOKEN_PATHS = ("/api/get-downloads/",)
+BOT_TOKEN_PATHS = ("/api/get-downloads/", "/api/bot/")
 
 
 def _env(name: str) -> str:
@@ -51,6 +50,13 @@ def bot_token_valid(request) -> bool:
     secret = _env("VIBRAVID_BOT_SECRET")
     supplied = request.headers.get("X-VibraVid-Token", "")
     return bool(secret and supplied and hmac.compare_digest(supplied.encode(), secret.encode()))
+
+
+def webhook_token_valid(request, expected: str) -> bool:
+    if not expected:
+        return not gui_auth_enabled()
+    supplied = request.headers.get("X-Webhook-Token", "")
+    return hmac.compare_digest(supplied.encode(), expected.encode())
 
 
 class LoginThrottle:

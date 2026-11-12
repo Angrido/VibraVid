@@ -40,7 +40,7 @@ While downloading, the message updates with the percentage and a "❌ Cancel dow
 
 ## Bridge to the GUI
 
-The bot calls the GUI over HTTP (`gui_url`) using the [`api/bot/*` endpoints](gui.md#bot-remote-control-api) plus `/api/get-downloads/` for `/coda`. With `VIBRAVID_BOT_SECRET` set, every request carries `X-VibraVid-Token`; without it the endpoints are unauthenticated, so set it before exposing the GUI beyond your LAN.
+The bot calls the GUI over HTTP (`gui_url`) using the [`api/bot/*` endpoints](gui.md#bot-remote-control-api) plus `/api/get-downloads/` for `/coda`. With `VIBRAVID_BOT_SECRET` set, every request carries `X-VibraVid-Token`; without it the endpoints are open only while the GUI login is off, so set it whenever `VIBRAVID_USERNAME`/`VIBRAVID_PASSWORD` are set.
 
 ## Running it
 

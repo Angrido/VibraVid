@@ -75,7 +75,7 @@ Open `http://<host>:8000`. For Docker/NAS use the [Docker](docker.md) and [NAS](
 | `POST api/bot/cancel/` | Stop a download |
 | `POST api/bot/logs/` | Recent log lines |
 
-Set `VIBRAVID_BOT_SECRET` to require a matching `X-VibraVid-Token` header. Without it these endpoints are unauthenticated: set it before exposing the GUI beyond your LAN.
+Set `VIBRAVID_BOT_SECRET` to require a matching `X-VibraVid-Token` header. Without it these endpoints are open when the GUI login is off, and need a logged-in session when it is on.
 
 ### Language
 
@@ -85,7 +85,7 @@ Translations live in `GUI/searchapp/i18n/<code>.json`: a flat object that maps t
 
 ### Login
 
-By default the GUI has no login. Set `VIBRAVID_USERNAME` and `VIBRAVID_PASSWORD` to require one on every page (5 failed attempts per address lock the login for 5 minutes). Webhooks, the Telegram bot (`VIBRAVID_BOT_SECRET`) and the remote API keep their own tokens. See [Securing the GUI](docker.md#securing-the-gui).
+By default the GUI has no login. Set `VIBRAVID_USERNAME` and `VIBRAVID_PASSWORD` to require one on every page (5 failed attempts per address lock the login for 5 minutes). Webhooks, the Telegram bot (`VIBRAVID_BOT_SECRET`) and the remote API keep their own tokens; with the login on, a webhook without its `webhook_secret` and a bot without `VIBRAVID_BOT_SECRET` are refused. See [Securing the GUI](docker.md#securing-the-gui).
 
 ### Custom service upload
 
