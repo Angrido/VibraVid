@@ -158,7 +158,13 @@ def find_on_provider(movie_id: int | None = None, episode_id: int | None = None)
             "provider": _extract_provider_from_tags(radarr, movie.get("tags", [])),
         }
         payload, provider = downloader.locate(item)
-        return {"payload": payload, "provider": provider, "season": None, "episode": None}
+        return {
+            "payload": payload,
+            "provider": provider,
+            "season": None,
+            "episode": None,
+            "series_only": None if payload else downloader.series_only_match,
+        }
 
     if not sonarr:
         raise ArrNotConfigured
@@ -182,4 +188,5 @@ def find_on_provider(movie_id: int | None = None, episode_id: int | None = None)
         "provider": provider,
         "season": season_num,
         "episode": local_episode if local_episode is not None else ep_num,
+        "series_only": None,
     }

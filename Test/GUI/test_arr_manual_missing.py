@@ -227,3 +227,15 @@ def test_check_reports_a_title_missing_from_every_provider(client, monkeypatch):
     result = _post(client, "/api/arr/missing/check/", {"episode": 702}).json()
 
     assert result["found"] is False
+
+
+def test_check_says_when_a_movie_exists_only_as_a_series(client, monkeypatch):
+    monkeypatch.setattr(manual_service, "find_on_provider", lambda movie_id=None, episode_id=None: {
+        "payload": None, "provider": "animeunity", "season": None, "episode": None,
+        "series_only": {"provider": "animeunity", "match": "Bleach: The Calamity (ITA)"},
+    })
+
+    result = _post(client, "/api/arr/missing/check/", {"movie": 31}).json()
+
+    assert result["found"] is False and result["series_only"] is True
+    assert result["match"] == "Bleach: The Calamity (ITA)" and result["provider"] == "animeunity"

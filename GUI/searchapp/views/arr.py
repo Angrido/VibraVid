@@ -665,6 +665,10 @@ def arr_missing_check(request: HttpRequest) -> JsonResponse:
         match = find_on_provider(movie_id=movie_id, episode_id=episode_id)
         payload = match["payload"]
         if not payload:
+            series_only = match.get("series_only")
+            if series_only:
+                return JsonResponse({"status": "ok", "found": False, "series_only": True, **series_only,
+                                     "message": "Found only as a series, while Radarr lists it as a movie."})
             return JsonResponse({"status": "ok", "found": False, "provider": match["provider"],
                                  "message": "Not found on any configured provider."})
         item = Entries(**{k: v for k, v in payload.items() if k in Entries.__dataclass_fields__})
