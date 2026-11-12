@@ -66,6 +66,9 @@ urlpatterns = [
     path("api/arr/trigger-sync/", views.arr_trigger_sync, name="arr_trigger_sync"),
     path("api/arr/queue/<int:queue_id>/delete/", views.arr_delete_request, name="arr_delete_request"),
     path("arr-stack/", views.arr_stack, name="arr_stack"),
+    path("arr-missing/", views.arr_missing, name="arr_missing"),
+    path("api/arr/missing/download/", views.arr_missing_download, name="arr_missing_download"),
+    path("api/arr/missing/check/", views.arr_missing_check, name="arr_missing_check"),
 
     # In-app update
     path("api/version/check/", views.check_updates, name="check_updates"),

@@ -1,0 +1,157 @@
+{% extends "searchapp/cinema_base.html" %}
+{% load static %}
+
+{% block title %}Missing from library — ARROWAR{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{% static 'searchapp/arr_missing.css' %}?v={{ app_version }}" />
+{% endblock %}
+
+{% block content %}
+<div class="cn-pad am-page" style="padding-top:34px">
+
+	<div class="cn-page-hd">
+		<h1 class="cn-blast">Missing from library</h1>
+		<p>Episodes and movies that Sonarr and Radarr are still waiting for. Nothing downloads on its own: pick what you want, check its languages, then download.</p>
+	</div>
+
+	{% if not configured %}
+		<div class="am-state">
+			<h2>Sonarr and Radarr are not connected</h2>
+			<p>Add their URL and API key in the ARR section of the settings, then come back here.</p>
+			<a class="cn-cta" href="{% url 'settings_editor' %}">Open settings</a>
+		</div>
+	{% elif scan_failed %}
+		<div class="am-state is-bad" role="alert">
+			<h2>The library scan failed</h2>
+			<p>Sonarr or Radarr returned an unexpected answer. Details are in the logs.</p>
+			<a class="cn-cta" href="{% url 'arr_missing' %}">Scan again</a>
+		</div>
+	{% else %}
+		<div class="cn-slab am-slab">
+			<div class="cn-big"><span class="cn-v">{{ episode_total }}</span><span class="cn-k">Episodes</span></div>
+			<div class="cn-big"><span class="cn-v">{{ series|length }}</span><span class="cn-k">Series</span></div>
+			<div class="cn-big"><span class="cn-v">{{ movies|length }}</span><span class="cn-k">Movies</span></div>
+			<span class="am-slab-actions">
+				<a class="cn-cta is-ghost" href="{% url 'arr_stack' %}">ARR Queue</a>
+				<a class="cn-cta is-ghost" href="{% url 'arr_missing' %}">Scan again</a>
+			</span>
+		</div>
+
+		{% for label in unreachable %}
+			<p class="cn-msg is-bad" role="alert">{{ label }} did not answer, so its missing items are not listed. Check that it is running and that the API key is right.</p>
+		{% endfor %}
+		{% if polling_active %}
+			<p class="cn-msg is-warn">Automatic polling is on, so missing items may also be downloaded without asking. Turn off polling in the ARR settings to decide everything from this page.</p>
+		{% endif %}
+
+		{% if series or movies %}
+			<div class="am-tools">
+				<div class="cn-fgroup am-search">
+					<label class="cn-tag" for="am-filter">Filter</label>
+					<input class="cn-input" id="am-filter" type="search" placeholder="Series or movie title" autocomplete="off">
+				</div>
+				<button class="cn-opt" type="button" id="am-select-all">Select all shown</button>
+				<button class="cn-opt" type="button" id="am-clear">Clear selection</button>
+			</div>
+
+			{% if series %}
+				<section class="am-group" aria-labelledby="am-series-h">
+					<div class="cn-strip-hd am-group-hd">
+						<h2 id="am-series-h">Series</h2>
+						<span class="cn-n">{{ series|length }} series · {{ episode_total }} episodes</span>
+					</div>
+					{% for serie in series %}
+						<article class="am-card" data-am-item data-title="{{ serie.title|lower }}" style="--am-i:{{ forloop.counter0 }}">
+							<div class="am-card-hd">
+								<input class="am-check" type="checkbox" data-am-scope id="am-s{{ serie.id }}"
+								       aria-label="Select every missing episode of {{ serie.title }}">
+								<button class="am-toggle" type="button" aria-expanded="false" aria-controls="am-sb{{ serie.id }}">
+									<span class="am-name" data-no-tr>{{ serie.title }}</span>
+									<span class="am-meta">
+										{% if serie.year %}<span class="cn-num">{{ serie.year }}</span> · {% endif %}<span class="cn-num">{{ serie.episode_count }}</span> <span>missing</span>{% if serie.provider %} · <span data-no-tr>{{ serie.provider }}</span>{% endif %}
+									</span>
+									<svg class="am-chev" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+								</button>
+							</div>
+							<div class="am-card-body" id="am-sb{{ serie.id }}" hidden>
+								{% for season in serie.seasons %}
+									<fieldset class="am-season" data-am-scope-group>
+										<legend>
+											<label class="am-season-lbl">
+												<input class="am-check" type="checkbox" data-am-scope>
+												<span>Season {{ season.number }}</span>
+											</label>
+										</legend>
+										<ul class="am-rows">
+											{% for episode in season.episodes %}
+												<li class="am-row">
+													<label class="am-pick">
+														<input class="am-check" type="checkbox" data-am-episode="{{ episode.id }}"
+														       {% if episode.state == "pending" or episode.state == "downloading" %}disabled{% endif %}>
+														<span class="am-code cn-mono">S{{ season.number|stringformat:"02d" }}E{{ episode.episodeNumber|stringformat:"02d" }}</span>
+														<span class="am-ep" data-no-tr>{{ episode.title|default:"" }}</span>
+													</label>
+													{% include "searchapp/_arr_missing_state.html" with state=episode.state %}
+													<button class="cn-opt am-lang-btn" type="button" data-am-check-episode="{{ episode.id }}"
+													        aria-describedby="am-r-e{{ episode.id }}">Check languages</button>
+													<div class="am-result" id="am-r-e{{ episode.id }}" role="status" aria-live="polite"></div>
+												</li>
+											{% endfor %}
+										</ul>
+									</fieldset>
+								{% endfor %}
+							</div>
+						</article>
+					{% endfor %}
+				</section>
+			{% endif %}
+
+			{% if movies %}
+				<section class="am-group" aria-labelledby="am-movies-h">
+					<div class="cn-strip-hd am-group-hd">
+						<h2 id="am-movies-h">Movies</h2>
+						<span class="cn-n">{{ movies|length }} movies</span>
+					</div>
+					<ul class="am-rows am-movies">
+						{% for movie in movies %}
+							<li class="am-row am-card" data-am-item data-title="{{ movie.title|lower }}" style="--am-i:{{ forloop.counter0 }}">
+								<label class="am-pick">
+									<input class="am-check" type="checkbox" data-am-movie="{{ movie.id }}"
+									       {% if movie.state == "pending" or movie.state == "downloading" %}disabled{% endif %}>
+									<span class="am-name" data-no-tr>{{ movie.title }}</span>
+									<span class="am-meta">{% if movie.year %}<span class="cn-num">{{ movie.year }}</span>{% endif %}{% if movie.provider %} · <span data-no-tr>{{ movie.provider }}</span>{% endif %}</span>
+								</label>
+								{% include "searchapp/_arr_missing_state.html" with state=movie.state %}
+								<button class="cn-opt am-lang-btn" type="button" data-am-check-movie="{{ movie.id }}"
+								        aria-describedby="am-r-m{{ movie.id }}">Check languages</button>
+								<div class="am-result" id="am-r-m{{ movie.id }}" role="status" aria-live="polite"></div>
+							</li>
+						{% endfor %}
+					</ul>
+				</section>
+			{% endif %}
+
+			<p class="cn-empty am-nomatch" id="am-nomatch" hidden>No series or movie matches this filter.</p>
+
+			<div class="am-bar" id="am-bar" inert>
+				<span class="am-bar-count" id="am-count" role="status" aria-live="polite">Nothing selected</span>
+				<p class="am-bar-msg" id="am-msg" role="status" aria-live="polite"></p>
+				<button class="cn-cta" type="button" id="am-download" disabled>Download selected</button>
+			</div>
+		{% elif not unreachable %}
+			<div class="am-state is-good">
+				<h2>Your library is complete</h2>
+				<p>Sonarr and Radarr are not waiting for any monitored episode or movie.</p>
+			</div>
+		{% endif %}
+	{% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'searchapp/arr_missing.js' %}?v={{ app_version }}"
+        data-download-url="{% url 'arr_missing_download' %}"
+        data-check-url="{% url 'arr_missing_check' %}"
+        data-csrf="{{ csrf_token }}"></script>
+{% endblock %}

@@ -34,6 +34,7 @@
 			<span class="cn-st {% if polling_enabled %}is-done{% else %}is-wait{% endif %}">
 				Polling {% if polling_enabled %}enabled{% else %}disabled{% endif %}
 			</span>
+			<a class="cn-cta is-ghost" href="{% url 'arr_missing' %}">Missing from library</a>
 			<button class="cn-cta" type="button" id="cn-arr-sync">Sync now</button>
 		</span>
 	</div>
