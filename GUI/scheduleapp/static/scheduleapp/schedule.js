@@ -276,7 +276,7 @@
             (form.id === "cn-seasons-form" && document.getElementById("cn-seasons-btn"));
         if (!submit) return;
         const mini = submit.classList.contains("cn-mini");
-        const dots = make("button", (mini ? "cn-mini" : "cn-cta is-ghost") + " cn-sch-dots", "•••");
+        const dots = make("button", (mini ? "cn-mini is-icon" : "cn-cta is-ghost") + " cn-sch-dots", "•••");
         dots.title = "More options";
         dots.setAttribute("aria-label", "More options");
         dots.setAttribute("aria-haspopup", "menu");

@@ -2,11 +2,10 @@
 
 {% block title %}{{ series.name }} — VibraVid{% endblock %}
 
-{% block top_float %} is-float{% endblock %}
 
 {% block content %}
 
-<section class="cn-hero" id="cn-hero" style="min-height:420px">
+<section class="cn-hero cn-series-hero" id="cn-hero">
 	<div class="cn-hero-art" style="--cn-h1:{{ series.p1 }};--cn-h2:{{ series.p2 }}"></div>
 	<div class="cn-hero-photo" id="cn-hero-photo"
 	     style="{% if series.backdrop %}background-image:url('{{ series.backdrop }}');{% else %}display:none;{% endif %}"></div>
@@ -15,14 +14,14 @@
 	<div class="cn-hero-in">
 		<div class="cn-kicker">
 			<span class="cn-st is-type">{% if series.is_album %}Album{% else %}Series{% endif %}</span>
-			<span class="cn-tag" style="color:var(--cn-mute)">
+			<span class="cn-tag">
 				{{ series.source_alias }}
 				{% if series.year %} · {{ series.year }}{% endif %}
 				· {{ seasons|length }} {% if series.is_album %}disc{{ seasons|length|pluralize }}{% else %}season{{ seasons|length|pluralize }}{% endif %}
 			</span>
 		</div>
 
-		<h1 class="cn-blast" data-no-tr style="font-size:clamp(34px,5.5vw,62px)">{{ series.name }}</h1>
+		<h1 class="cn-blast" data-no-tr>{{ series.name }}</h1>
 
 		{% if not seasons %}
 			<p class="cn-hero-line">
@@ -31,42 +30,44 @@
 			</p>
 		{% endif %}
 
-        {% if not series.is_album %}
-        <div id="cn-series-quality">{% include "searchapp/quality_picker.html" %}</div>
-        {% endif %}
+		<div class="cn-series-tools">
+		{% if not series.is_album %}
+		<div id="cn-series-quality">{% include "searchapp/quality_picker.html" %}</div>
+		{% endif %}
 		<div class="cn-acts cn-series-actions">
-			<form method="post" style="display:inline">
+			<form method="post">
 				{% csrf_token %}
 				<input type="hidden" name="source_alias" value="{{ series.source_alias }}">
 				<input type="hidden" name="item_payload" value="{{ series.item_payload }}">
 				<input type="hidden" name="download_type" value="full_series">
 				<button class="cn-cta" type="submit" id="cn-all"
 				        {% if not seasons %}disabled{% endif %}>
-					Download all
+					<svg class="cn-ico is-sm" aria-hidden="true"><use href="#i-download"/></svg>Download all
 				</button>
 			</form>
 
-			<form action="{% url 'add_to_watchlist' %}" method="post" style="display:inline">
+			<form action="{% url 'add_to_watchlist' %}" method="post">
 				{% csrf_token %}
 				<input type="hidden" name="source_alias" value="{{ series.source_alias }}">
 				<input type="hidden" name="item_payload" value="{{ series.item_payload }}">
-				<button class="cn-cta is-ghost" type="submit" title="Add and monitor">Watchlist</button>
+				<button class="cn-cta is-ghost" type="submit" title="Add and monitor">
+					<svg class="cn-ico is-sm" aria-hidden="true"><use href="#i-bookmark"/></svg>Watchlist
+				</button>
 			</form>
+		</div>
 		</div>
 	</div>
 </section>
 
-<div class="cn-pad" style="padding-top:34px">
+<div class="cn-pad">
 
-	{% if messages %}
-		{% for m in messages %}
-			<p class="cn-msg{% if m.tags == 'error' %} is-bad{% elif m.tags == 'warning' %} is-warn{% endif %}">{{ m }}</p>
-		{% endfor %}
-	{% endif %}
+	{% for m in messages %}
+		<p class="cn-msg{% if m.tags == 'error' %} is-bad{% elif m.tags == 'warning' %} is-warn{% endif %}" role="alert">{{ m }}</p>
+	{% endfor %}
 
 	{% if seasons %}
 	{% if not series.is_album %}{% include "searchapp/language_filter.html" %}{% endif %}
-	<p class="cn-empty cn-language-empty" hidden>No episodes are available in the selected language.</p>
+	<p class="cn-empty cn-language-empty" role="status" hidden>No episodes are available in the selected language.</p>
 	<div class="cn-ssel-nav" id="cn-seasons-nav">
 		<button type="button" class="cn-ssel-arrow" id="cn-seasons-prev" hidden disabled
 		        aria-label="Scroll {% if series.is_album %}discs{% else %}seasons{% endif %} left" aria-controls="cn-seasons-list">
@@ -109,21 +110,21 @@
 
 	<div class="cn-tray" id="cn-tray">
 		<span class="cn-tray-txt" id="cn-tray-txt"></span>
-		<button class="cn-cta" type="button" id="cn-seasons-btn">Download</button>
+		<button class="cn-cta is-sm" type="button" id="cn-seasons-btn">Download</button>
 	</div>
 	{% endif %}
 
 	{% for season in seasons %}
 		<section class="cn-spanel" data-season="{{ season.number }}" {% if not forloop.first %}hidden{% endif %}>
 			<div class="cn-season-hd">
-				<span style="flex:1;min-width:170px">
+				<span>
 					<span class="cn-t">
 						{% if series.is_album %}{{ season.name|default:season.number }}{% else %}Season {{ season.number }}{% endif %}
 					</span>
 					<span class="cn-s">
 						<span data-language-count="{{ season.number }}">{{ season.episode_count }}</span> {% if series.is_album %}track{{ season.episode_count|pluralize }}{% else %}episode{{ season.episode_count|pluralize }}{% endif %}
 						{% if season.owned_count %}
-							· <b style="color:var(--cn-go)">{{ season.owned_count }} already in library</b>
+							· <b>{{ season.owned_count }} already in library</b>
 						{% endif %}
 					</span>
 				</span>
@@ -138,13 +139,13 @@
 					<button class="cn-opt" type="button" data-pick-none="{{ season.number }}">None</button>
 				</span>
 
-				<form method="post" style="display:inline">
+				<form method="post">
 					{% csrf_token %}
 					<input type="hidden" name="source_alias" value="{{ series.source_alias }}">
 					<input type="hidden" name="item_payload" value="{{ series.item_payload }}">
 					<input type="hidden" name="season_number" value="{{ season.number }}">
 					<input type="hidden" name="download_type" value="full_season">
-					<button class="cn-cta is-ghost" type="submit" style="padding:9px 18px;font-size:13px">
+					<button class="cn-cta is-ghost is-sm" type="submit">
 						Whole season
 					</button>
 				</form>
@@ -202,14 +203,14 @@
 					{% endfor %}
 				</div>
 
-				<button class="cn-cta" type="submit" style="margin-top:15px"
+				<button class="cn-cta cn-season-go" type="submit"
 				        id="cn-go-{{ season.number }}">
 					Download selected
 				</button>
 			</form>
 		</section>
 	{% empty %}
-		<p class="cn-empty" style="padding-left:0">No seasons to show.</p>
+		<p class="cn-empty">No seasons to show.</p>
 	{% endfor %}
 </div>
 {% endblock %}

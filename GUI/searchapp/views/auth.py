@@ -25,12 +25,13 @@ def login_view(request):
 
     error = ""
     status = 200
+    username = request.POST.get("username", "")
     if request.method == "POST":
         address = _client_address(request)
         if security.login_throttle.is_blocked(address):
             error = "Too many failed attempts. Try again in a few minutes."
             status = 429
-        elif security.check_credentials(request.POST.get("username", ""), request.POST.get("password", "")):
+        elif security.check_credentials(username, request.POST.get("password", "")):
             security.login_throttle.reset(address)
             request.session.cycle_key()
             request.session[security.SESSION_KEY] = True
@@ -39,7 +40,7 @@ def login_view(request):
             security.login_throttle.record_failure(address)
             error = "Wrong username or password."
             status = 401
-    return render(request, "searchapp/cinema_login.html", {"error": error, "next": next_url}, status=status)
+    return render(request, "searchapp/cinema_login.html", {"error": error, "next": next_url, "username": username[:150]}, status=status)
 
 
 @require_http_methods(["POST"])

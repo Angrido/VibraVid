@@ -3,16 +3,10 @@
 {% block title %}VibraVid{% endblock %}
 
 {# c'è un hero: la barra parte trasparente e si riempie allo scroll #}
-{% block top_float %} is-float{% endblock %}
 
 {% block content %}
 
-{% comment %}
-	Reso vuoto e riempito da JS col primo job attivo. Se non gira niente resta
-	lo stato di riposo: non si nasconde, altrimenti la pagina "salta" quando un
-	download parte.
-{% endcomment %}
-<section class="cn-hero" id="cn-hero">
+<section class="cn-hero cn-dl-hero" id="cn-hero" aria-labelledby="cn-hero-title">
 	<div class="cn-hero-art" id="cn-hero-art"></div>
 	<div class="cn-hero-veil"></div>
 
@@ -30,50 +24,53 @@
 				<span class="cn-pct" id="cn-hero-pct">0<span>%</span></span>
 				<span class="cn-of" id="cn-hero-of"></span>
 			</div>
-			<div class="cn-bar"><i id="cn-hero-bar" style="width:0%"></i></div>
+			<div class="cn-bar" role="progressbar" aria-labelledby="cn-hero-title" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="cn-hero-meter"><i id="cn-hero-bar"></i></div>
 			<div class="cn-facts" id="cn-hero-facts"></div>
 		</div>
 
 		<div class="cn-acts">
-			<button class="cn-cta" type="button" id="cn-hero-stop" hidden>Stop</button>
-			<a class="cn-cta is-ghost" href="{% url 'search_page' %}">Search something</a>
+			<button class="cn-cta is-ghost" type="button" id="cn-hero-stop" hidden>Stop</button>
+			<a class="cn-cta" href="{% url 'search_page' %}" id="cn-hero-search">
+				<svg class="cn-ico is-sm" aria-hidden="true"><use href="#i-search"/></svg>Search something
+			</a>
 		</div>
 	</div>
 </section>
 
-{# ── FILE ─────────────────────────────────────────────────────────────────── #}
-<section class="cn-strip">
+<section class="cn-strip" aria-labelledby="cn-h-now">
 	<div class="cn-strip-hd">
-		<h2>Now</h2><span class="cn-n" id="cn-n-active">0</span>
-		<button class="cn-cta is-ghost" type="button" id="cn-stop-all" hidden>Stop all downloads</button>
+		<h2 id="cn-h-now">Now</h2><span class="cn-n" id="cn-n-active">0</span>
+		<button class="cn-cta is-ghost is-sm" type="button" id="cn-stop-all" hidden>
+			<svg class="cn-ico is-sm" aria-hidden="true"><use href="#i-stop"/></svg>Stop all downloads
+		</button>
 	</div>
-	<div class="cn-lines" id="cn-reel-active"></div>
-	<p class="cn-empty" id="cn-empty-active">No downloads running.</p>
+	<div class="cn-lines" id="cn-reel-active" aria-live="polite" aria-busy="true"><div class="cn-skel" aria-hidden="true"></div></div>
+	<p class="cn-empty" id="cn-empty-active" hidden>No downloads running.</p>
 </section>
 
-<section class="cn-strip cn-manual-section" id="cn-manual-section" hidden>
-    <div class="cn-strip-hd"><h2>Choose tracks</h2></div>
-    <div id="cn-manual-requests"></div>
+<section class="cn-strip cn-manual-section" id="cn-manual-section" hidden aria-labelledby="cn-h-tracks">
+	<div class="cn-strip-hd"><h2 id="cn-h-tracks">Choose tracks</h2></div>
+	<div id="cn-manual-requests"></div>
 </section>
 
-<section class="cn-strip">
+<section class="cn-strip" aria-labelledby="cn-h-queue">
 	<div class="cn-strip-hd">
-		<h2>Queued</h2><span class="cn-n" id="cn-n-queue">0</span>
+		<h2 id="cn-h-queue">Queued</h2><span class="cn-n" id="cn-n-queue">0</span>
 		<button class="cn-more" type="button" id="cn-clear-queue" hidden>Clear queued</button>
 	</div>
-	<div class="cn-reel" id="cn-reel-queue"></div>
-	<p class="cn-empty" id="cn-empty-queue">Queue is empty.</p>
+	<div class="cn-reel" id="cn-reel-queue" tabindex="0" aria-labelledby="cn-h-queue"></div>
+	<p class="cn-empty" id="cn-empty-queue" hidden>Queue is empty.</p>
 </section>
 
-<section class="cn-strip">
+<section class="cn-strip" aria-labelledby="cn-h-watch">
 	<div class="cn-strip-hd">
-		<h2>From your watchlist</h2><span class="cn-n">{{ watchlist_items|length }}</span>
+		<h2 id="cn-h-watch">From your watchlist</h2><span class="cn-n">{{ watchlist_items|length }}</span>
 		<a class="cn-more" href="{% url 'watchlist' %}">Manage</a>
 	</div>
 	{% if watchlist_items %}
-		<div class="cn-reel">
+		<div class="cn-reel" tabindex="0" aria-labelledby="cn-h-watch">
 			{% for item in watchlist_items %}
-				<article class="cn-tile" style="--cn-p1:{{ item.p1 }};--cn-p2:{{ item.p2 }}" tabindex="0">
+				<a class="cn-tile" href="{% url 'watchlist' %}" style="--cn-p1:{{ item.p1 }};--cn-p2:{{ item.p2 }}">
 					<div class="cn-poster">
 						{% if item.is_new %}<span class="cn-flag cn-st is-run">New</span>{% endif %}
 						{% if item.poster %}
@@ -88,7 +85,7 @@
 					</div>
 					<span class="cn-cap">{{ item.name }}</span>
 					<span class="cn-sub">{{ item.site }}</span>
-				</article>
+				</a>
 			{% endfor %}
 		</div>
 	{% else %}
@@ -96,13 +93,13 @@
 	{% endif %}
 </section>
 
-<section class="cn-strip">
+<section class="cn-strip" aria-labelledby="cn-h-hist">
 	<div class="cn-strip-hd">
-		<h2>Recent results</h2><span class="cn-n" id="cn-n-hist">0</span>
-		<button class="cn-cta is-ghost" type="button" id="cn-clear-history" hidden>Clear history</button>
+		<h2 id="cn-h-hist">Recent results</h2><span class="cn-n" id="cn-n-hist">0</span>
+		<button class="cn-cta is-ghost is-sm" type="button" id="cn-clear-history" hidden>Clear history</button>
 	</div>
-	<div class="cn-reel" id="cn-reel-hist"></div>
-	<p class="cn-empty" id="cn-empty-hist">No completed downloads yet.</p>
+	<div class="cn-reel" id="cn-reel-hist" tabindex="0" aria-labelledby="cn-h-hist"></div>
+	<p class="cn-empty" id="cn-empty-hist" hidden>No completed downloads yet.</p>
 </section>
 
 {% endblock %}
@@ -163,7 +160,7 @@
 		var d = duotone(key);
 		return '<article class="cn-tile' + (opts.wide ? " is-wide" : "") + '"' +
 			' data-key="' + esc(key) + '"' +
-			' style="--cn-p1:' + d[0] + ';--cn-p2:' + d[1] + '" tabindex="0">' +
+			' style="--cn-p1:' + d[0] + ';--cn-p2:' + d[1] + '">' +
 			poster(item, opts) +
 			(opts.cap ? '<span class="cn-cap">' + esc(titleize(opts.cap)) + "</span>" : "") +
 			(opts.sub ? '<span class="cn-sub">' + esc(opts.sub) + "</span>" : "") +
@@ -273,8 +270,8 @@
                 selectedTrackFacts(item) +
 			'</span>' +
 			'<span class="cn-r">' + (item.size ? esc(item.size) + ' · ' : '') + esc(item.speed || '') + ' · ' + item.pctText + '%</span>' +
-			'<button class="cn-cta is-ghost" type="button" data-stop="' + esc(downloadId) + '" ' +
-				'style="padding:8px 16px;font-size:13px"' + (isStopping(item) ? ' disabled' : '') + '>' + (isStopping(item) ? 'Stopping...' : stopLabel(item)) + '</button>';
+			'<button class="cn-cta is-ghost is-sm" type="button" data-stop="' + esc(downloadId) + '"' +
+				(isStopping(item) ? ' disabled' : '') + '>' + (isStopping(item) ? 'Stopping...' : stopLabel(item)) + '</button>';
 	}
 
 	function activeRow(item, downloadId) {
@@ -317,6 +314,7 @@
 	function fill(reelId, emptyId, countId, rows) {
 		var reel = document.getElementById(reelId);
 		reelPatch(reel, rows);
+		reel.removeAttribute("aria-busy");
 		reel.hidden = rows.length === 0;
 		document.getElementById(emptyId).hidden = rows.length > 0;
 		document.getElementById(countId).textContent = rows.length;
@@ -408,6 +406,12 @@
 		else if (s > 0 && !/S\d+/i.test(base)) suffix = " S" + s;
 		return esc(titleize(base)) + esc(suffix);
 	}
+	function setHTML(node, html) {
+		if (node.dataset.html === html) return;
+		node.dataset.html = html;
+		node.innerHTML = html;
+	}
+
 	function renderHero(active) {
 		var prog = document.getElementById("cn-hero-prog");
 		var stop = document.getElementById("cn-hero-stop");
@@ -416,11 +420,11 @@
 
 		if (!active.length) {
 			heroId = null;
-			document.getElementById("cn-hero-title").innerHTML =
-				'Nothing running<em id="cn-hero-sub">Queue is empty</em>';
-			kick.innerHTML = '<span class="cn-st is-wait">Idle</span>';
+			setHTML(document.getElementById("cn-hero-title"), 'Nothing running<em id="cn-hero-sub">Queue is empty</em>');
+			setHTML(kick, '<span class="cn-st is-wait">Idle</span>');
 			prog.hidden = true;
 			stop.hidden = true;
+			document.getElementById("cn-hero-search").classList.remove("is-ghost");
 			art.style.backgroundImage = "";
 			art.classList.remove("is-soft");
 			heroEntry = null;
@@ -429,26 +433,28 @@
 
 		var d = active[0];
 		heroId = d.id;
+		document.getElementById("cn-hero-search").classList.add("is-ghost");
 		stop.textContent = isStopping(d) ? "Stopping..." : stopLabel(d);
 		stop.disabled = !!isStopping(d);
 		var p = pct(d.progress);
 
-		kick.innerHTML =
-			'<span class="cn-st is-run">' + esc(d.status || "Running") + "</span>" +
-			'<span class="cn-tag" style="color:var(--cn-mute)">' + esc(d.site) +
-			(d.is_anime ? " · anime" : "") + "</span>";
+		setHTML(kick,
+			'<span class="cn-st is-run"><span class="cn-eq" aria-hidden="true"><i></i><i></i><i></i></span>' + esc(d.status || "Running") + "</span>" +
+			'<span class="cn-tag">' + esc(d.site) +
+			(d.is_anime ? " · anime" : "") + "</span>");
 
-		document.getElementById("cn-hero-title").innerHTML = heroTitle(d);
+		setHTML(document.getElementById("cn-hero-title"), heroTitle(d));
 
-		document.getElementById("cn-hero-pct").innerHTML = p.toFixed(0) + "<span>%</span>";
+		setHTML(document.getElementById("cn-hero-pct"), p.toFixed(0) + "<span>%</span>");
 		document.getElementById("cn-hero-of").textContent = d.size || "";
 		document.getElementById("cn-hero-bar").style.width = p + "%";
+		document.getElementById("cn-hero-meter").setAttribute("aria-valuenow", p.toFixed(0));
 
 		var facts = [];
 		if (d.speed) facts.push("<span><b>" + esc(d.speed) + "</b></span>");
         if (d.language && !(d.selected_tracks || []).length)
             facts.push("<span>audio <b>" + esc(d.language) + "</b></span>");
-        document.getElementById("cn-hero-facts").innerHTML = facts.join("");
+        setHTML(document.getElementById("cn-hero-facts"), facts.join(""));
 
 		heroEntry = d;
 		askBackdrop(d);
@@ -646,6 +652,9 @@
 				document.getElementById("cn-stop-all").hidden = active.length === 0;
 				document.getElementById("cn-clear-history").hidden = hist.length === 0;
 				renderHero(active);
+				var badge = document.getElementById("cn-nav-active");
+				badge.textContent = active.length;
+				badge.hidden = !active.length;
 
 				fill("cn-reel-active", "cn-empty-active", "cn-n-active", active.map(function (d, i) {
 					var p = pct(d.progress);
@@ -693,8 +702,8 @@
 								cap: d.title,
 								sub: d.site,
 								action: d.id
-									? '<button class="cn-cta is-ghost" type="button" data-remove-queued="' +
-										esc(queuedId) + '" ' + (removable ? '' : 'disabled ') + 'style="margin-top:8px;padding:7px 12px;font-size:12px">' + (d.parent_id ? 'Remove season' : 'Remove') + '</button>'
+									? '<button class="cn-mini cn-tile-act" type="button" data-remove-queued="' +
+										esc(queuedId) + '" ' + (removable ? '' : 'disabled ') + '>' + (d.parent_id ? 'Remove season' : 'Remove') + '</button>'
 									: ""
 							});
 						},
@@ -722,8 +731,8 @@
 								sub: sub,
                                 trackInfo: selectedTrackFacts(d),
 								action: d.retryable && d.id
-									? '<button class="cn-cta is-ghost" type="button" data-retry-download="' +
-										esc(d.id) + '" style="margin-top:8px;padding:7px 12px;font-size:12px">Retry</button>'
+									? '<button class="cn-mini cn-tile-act" type="button" data-retry-download="' +
+										esc(d.id) + '">Retry</button>'
 									: ""
 							});
 						},
@@ -742,7 +751,11 @@
 
 				upgradePosters(active.concat(queue, hist.slice(0, 20)));
 			})
-			.catch(function () { /* rete giù: si riprova al giro dopo */ });
+			.catch(function () {
+				["active", "queue", "hist"].forEach(function (key) {
+					if (document.getElementById("cn-reel-" + key).hasAttribute("aria-busy")) fill("cn-reel-" + key, "cn-empty-" + key, "cn-n-" + key, []);
+				});
+			});
 	}
 
 	var posterAsked = {};

@@ -5,70 +5,63 @@
 
 {% block content %}
 <div class="cn-pad cn-seekpage">
+	<form action="{% url 'search' %}" method="get" id="cn-form" role="search">
+		{% for message in messages %}
+			<p class="cn-msg{% if message.tags == 'error' %} is-bad{% elif message.tags == 'warning' %} is-warn{% endif %}" role="alert">{{ message }}</p>
+		{% endfor %}
 
-	{% for message in messages %}
-		<p class="cn-msg{% if message.tags == 'error' %} is-bad{% elif message.tags == 'warning' %} is-warn{% endif %}">{{ message }}</p>
-	{% endfor %}
-
-	{% comment %}
-		Il form va alla view `search` storica, che resta la sola a parlare coi
-		provider. Metodo GET perché quella view accetta query+site anche da
-		querystring: così un risultato è linkabile e ricaricabile.
-	{% endcomment %}
-	<form action="{% url 'search' %}" method="get" id="cn-form">
-		<label class="cn-seek-label" for="cn-q">Search</label>
+		<h1 class="cn-seek-label"><label for="cn-q">What do you want to watch?</label></h1>
 
 		<div class="cn-seek is-hero">
-			<input type="text" name="query" id="cn-q" required
+			<svg class="cn-ico" aria-hidden="true"><use href="#i-search"/></svg>
+			<input type="search" name="query" id="cn-q" required enterkeyhint="search"
 			       placeholder="Title, actor, author…" autocomplete="off" autofocus>
 			<button class="cn-cta" type="submit">Search</button>
 		</div>
 		<input type="hidden" name="site" id="cn-site" value="{{ all_token }}">
 		<input type="hidden" name="audio_language" value="{{ audio_language_config.selection }}">
 
-		{% comment %}
-			L'interruttore dei provider sta nella STESSA riga degli ambiti, non
-			sotto: da solo finiva su una riga sua e sembrava un pulsante di
-			default del browser rimasto lì per sbaglio. È una scelta sorella
-			delle altre — "cerca ovunque / in una categoria / su uno solo" — e
-			deve leggersi così, distinta dalle categorie ma non estranea.
-		{% endcomment %}
-		<div class="cn-opts" id="cn-scope">
-			<button class="cn-opt" type="button" aria-pressed="true"
-			        data-scope="{{ all_token }}" data-cat="">
-				All <span class="cn-opt-n">{{ sites|length }}</span>
-			</button>
-			{% for s in scopes %}
-				<button class="cn-opt" type="button" aria-pressed="false"
-				        data-scope="{{ s.value }}" data-cat="{{ s.category }}"
-				        data-label="{{ s.label }}">
-					{{ s.label }} <span class="cn-opt-n">{{ s.count }}</span>
+		<div class="cn-seek-scope">
+			<span class="cn-tag" id="cn-scope-label">Where to search</span>
+			<div class="cn-opts" id="cn-scope" role="group" aria-labelledby="cn-scope-label">
+				<button class="cn-opt" type="button" aria-pressed="true"
+				        data-scope="{{ all_token }}" data-cat="">
+					All <span class="cn-opt-n">{{ sites|length }}</span>
 				</button>
-			{% endfor %}
+				{% for s in scopes %}
+					<button class="cn-opt" type="button" aria-pressed="false"
+					        data-scope="{{ s.value }}" data-cat="{{ s.category }}"
+					        data-label="{{ s.label }}">
+						{{ s.label }} <span class="cn-opt-n">{{ s.count }}</span>
+					</button>
+				{% endfor %}
 
-			<button class="cn-opt is-toggle" type="button" id="cn-toggle"
-			        aria-expanded="false" aria-controls="cn-site-filter">
-				Single provider <i aria-hidden="true">▾</i>
-			</button>
+				<button class="cn-opt is-toggle" type="button" id="cn-toggle"
+				        aria-expanded="false" aria-controls="cn-site-filter">
+					Single provider <svg class="cn-ico is-sm" aria-hidden="true"><use href="#i-chevron"/></svg>
+				</button>
+			</div>
+
+			<p class="cn-seek-hint" id="cn-scope-hint" aria-live="polite"></p>
+			<p class="cn-seek-hint cn-extra-line" id="cn-extra-line" hidden></p>
+			<p class="cn-seek-hint cn-extra-line" id="cn-login-line" hidden></p>
+
+			<div class="cn-opts cn-sitelist" id="cn-site-filter" role="group" aria-label="Providers" hidden>
+				{% for s in sites %}
+					<button class="cn-opt" type="button" aria-pressed="false"
+					        data-site="{{ s.name }}" data-cat="{{ s.category }}">{{ s.name|provider }}</button>
+				{% endfor %}
+			</div>
 		</div>
 
-		<p class="cn-seek-hint" id="cn-scope-hint"></p>
-		<p class="cn-seek-hint cn-extra-line" id="cn-extra-line" hidden></p>
-		<p class="cn-seek-hint cn-extra-line" id="cn-login-line" hidden></p>
-
-		<div class="cn-opts cn-sitelist" id="cn-site-filter" hidden>
-			{% for s in sites %}
-				<button class="cn-opt" type="button" aria-pressed="false"
-				        data-site="{{ s.name }}" data-cat="{{ s.category }}">{{ s.name|provider }}</button>
-			{% endfor %}
-		</div>
+		{% if not sites %}
+			<div class="cn-empty">
+				<b>No active providers</b>
+				<span>Check <code>hidden_services</code> in <code>config.toml</code>.</span>
+				<a class="cn-cta is-ghost" href="{% url 'settings_editor' %}">Open settings</a>
+			</div>
+		{% endif %}
 	</form>
-
-	{% if not sites %}
-		<p class="cn-empty" style="padding-left:0">
-			No active providers. Check <code>hidden_services</code> in <code>config.toml</code>.
-		</p>
-	{% endif %}
 </div>
 {% endblock %}
 

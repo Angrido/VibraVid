@@ -9,10 +9,11 @@
 {% block title %}{{ query }} — VibraVid{% endblock %}
 
 {% block content %}
-<div class="cn-pad" style="padding-top:34px">
+<div class="cn-pad">
 
 	<div class="cn-page-hd">
-		<h1 class="cn-blast">{{ query|default:"Results" }}</h1>
+		<span class="cn-tag">Results for</span>
+		<h1 class="cn-blast" data-no-tr>{{ query|default:"Results" }}</h1>
 		<p>
 			<span id="cn-count">{{ results|length }}</span> result{{ results|length|pluralize }}
 			{% if is_global %}across all providers{% elif selected_site %}from {{ selected_site|provider }}{% endif %}
@@ -22,39 +23,28 @@
 		</p>
 	</div>
 
-	{% comment %}
-		Ricercare da qui invece di tornare indietro: la ricerca è un'operazione
-		che si ripete (parole diverse, stesso ambito), e obbligare a passare
-		dalla pagina Cerca ogni volta allunga il giro senza dare niente.
-		L'ambito resta quello di questa ricerca, così si cambia solo il testo.
-	{% endcomment %}
-	<form action="{% url 'search' %}" method="get" class="cn-seek" style="margin-bottom:26px">
-		<input type="text" name="query" value="{{ query }}" required
-		       placeholder="Search again…" autocomplete="off" aria-label="Search again">
-		<input type="hidden" name="site" value="{{ selected_site }}">
-		<input type="hidden" name="audio_language" value="{{ audio_language_config.selection }}">
-		<button class="cn-cta" type="submit">Search</button>
-		<a class="cn-cta is-ghost" href="{% url 'search_page' %}"
-		   style="display:flex;align-items:center">Change scope</a>
+	<form action="{% url 'search' %}" method="get" class="cn-row cn-reseek" role="search">
+		<div class="cn-seek cn-grow">
+			<svg class="cn-ico" aria-hidden="true"><use href="#i-search"/></svg>
+			<input type="search" name="query" value="{{ query }}" required enterkeyhint="search"
+			       placeholder="Search again…" autocomplete="off" aria-label="Search again">
+			<input type="hidden" name="site" value="{{ selected_site }}">
+			<input type="hidden" name="audio_language" value="{{ audio_language_config.selection }}">
+			<button class="cn-cta" type="submit">Search</button>
+		</div>
+		<a class="cn-cta is-ghost" href="{% url 'search_page' %}">Change scope</a>
 	</form>
 
-	{% if messages %}
-		{% for m in messages %}
-			<p class="cn-msg{% if m.tags == 'error' %} is-bad{% elif m.tags == 'warning' %} is-warn{% endif %}">{{ m }}</p>
-		{% endfor %}
-	{% endif %}
+	{% for m in messages %}
+		<p class="cn-msg{% if m.tags == 'error' %} is-bad{% elif m.tags == 'warning' %} is-warn{% endif %}" role="alert">{{ m }}</p>
+	{% endfor %}
 
 	{% if results %}
 		{% include "searchapp/language_filter.html" %}
-		{% comment %}
-			Le schede compaiono solo per i tipi effettivamente presenti: una
-			ricerca di libri non deve mostrare un filtro "Serie" che non può mai
-			dare niente. Lo decide showAvailableFilters() dopo il render.
-		{% endcomment %}
 		<div class="cn-filters">
 			<div class="cn-fgroup">
-				<span class="cn-tag">Show</span>
-				<div class="cn-opts" id="cn-kinds">
+				<span class="cn-tag" id="cn-kinds-label">Show</span>
+				<div class="cn-opts" id="cn-kinds" role="group" aria-labelledby="cn-kinds-label">
 					<button class="cn-opt" type="button" data-kind="" aria-pressed="true">All</button>
 					<button class="cn-opt" type="button" data-kind="movie"  aria-pressed="false" hidden>Movies</button>
 					<button class="cn-opt" type="button" data-kind="series" aria-pressed="false" hidden>Series</button>
@@ -85,99 +75,90 @@
 				         {% else %}
 				         data-fire="cn-dl-{{ forloop.counter }}"
 				         {% endif %}
+				         aria-labelledby="cn-cap-{{ forloop.counter }}"
 				         tabindex="0">
 
 					<div class="cn-poster">
 						<span class="cn-flag cn-st is-type">{{ result.display_type }}</span>
 						{% if result.year %}<span class="cn-ring">{{ result.year }}</span>{% endif %}
-
-						{% comment %}
-							`bg_image_url` ricade su un placeholder di via.placeholder.com
-							quando lo scraper non dà niente: è una richiesta di rete verso
-							terzi su un'app che può girare offline, e sotto c'è già la
-							locandina tipografica. Meglio non chiederlo proprio.
-						{% endcomment %}
 						{% if result.bg_image_url and "via.placeholder" not in result.bg_image_url %}
 							<img id="cn-poster-{{ forloop.counter }}" src="{{ result.bg_image_url }}"
 							     alt="" loading="lazy" decoding="async" onerror="this.remove()">
 						{% endif %}
-
 						<div class="cn-poster-fill">
 							<div class="cn-rule"></div>
 							<div class="cn-ptitle">{{ result.display_title }}</div>
 							<div class="cn-pmeta">{{ result.source_alias|provider }}</div>
 						</div>
-
-						<div class="cn-pick">
-                            {% if result.media_kind == "movie" or result.media_kind == "series" %}
-                            {% include "searchapp/quality_picker.html" %}
-                            {% endif %}
-                            <div class="cn-pick-row">
-							{% comment %}
-								`media_kind` e non `is_song`: il dizionario dei risultati
-								non ha mai avuto quella chiave (vedi
-								_media_item_to_display_dict), quindi il ramo col formato
-								audio in results.html non si è mai aperto.
-							{% endcomment %}
-							{% if result.media_kind == "song" %}
-								<form id="cn-dl-{{ forloop.counter }}" action="{% url 'start_download' %}" method="post">
-									{% csrf_token %}
-									<input type="hidden" name="source_alias" value="{{ result.source_alias }}">
-									<input type="hidden" name="item_payload" value="{{ result.payload_json }}">
-									<label class="cn-mini is-mark" title="Audio format">
-										<select name="audio_format" aria-label="Audio format">
-											<option value="flac" selected>FLAC</option>
-											<option value="mp3">MP3</option>
-										</select>
-									</label>
-									<button class="cn-mini" type="submit">Download</button>
-								</form>
-							{% elif result.is_movie %}
-								<form id="cn-dl-{{ forloop.counter }}" action="{% url 'start_download' %}" method="post"{% if result.media_kind == "movie" %} data-audio-prompt{% endif %}>
-									{% csrf_token %}
-									<input type="hidden" name="source_alias" value="{{ result.source_alias }}">
-									<input type="hidden" name="item_payload" value="{{ result.payload_json }}">
-									<button class="cn-mini" type="submit">Download</button>
-								</form>
-							{% else %}
-								<form id="cn-detail-{{ forloop.counter }}" action="{% url 'series_detail' %}" method="post">
-									{% csrf_token %}
-									<input type="hidden" name="source_alias" value="{{ result.source_alias }}">
-									<input type="hidden" name="item_payload" value="{{ result.payload_json }}">
-								</form>
-								<button class="cn-mini" type="submit" form="cn-detail-{{ forloop.counter }}">
-									Episodes
-								</button>
-							{% endif %}
-
-							{% comment %}
-								Niente watchlist per i libri: un libro non ha puntate
-								nuove da sorvegliare, la riga non farebbe mai niente.
-							{% endcomment %}
-							{% if result.media_kind != "book" %}
-								<form action="{% url 'add_to_watchlist' %}" method="post">
-									{% csrf_token %}
-									<input type="hidden" name="source_alias" value="{{ result.source_alias }}">
-									<input type="hidden" name="item_payload" value="{{ result.payload_json }}">
-									<input type="hidden" name="search_query" value="{{ query }}">
-									<input type="hidden" name="search_site" value="{{ result.source_alias }}">
-									<button class="cn-mini is-mark" type="submit" title="Add to watchlist">＋</button>
-								</form>
-							{% endif %}
-						</div></div>
 					</div>
 
-					<span class="cn-cap">{{ result.display_title }}</span>
-					<span class="cn-sub">{{ result.source_alias|provider }}{% if is_global %} · {{ result.display_type }}{% endif %}</span>
-					{% if result.availability %}<span class="cn-avail">{{ result.availability }}</span>{% endif %}
+					<div class="cn-tile-body">
+						<span class="cn-cap" id="cn-cap-{{ forloop.counter }}">{{ result.display_title }}</span>
+						<span class="cn-sub">{{ result.source_alias|provider }}{% if is_global %} · {{ result.display_type }}{% endif %}</span>
+						{% if result.availability %}<span class="cn-avail">{{ result.availability }}</span>{% endif %}
 						{% if result.catalog_language %}<span class="cn-sub" title="Provider catalog language, not verified audio">Catalog: {{ result.catalog_language|upper }}</span>{% endif %}
+					</div>
+
+					<div class="cn-pick">
+						{% if result.media_kind == "movie" or result.media_kind == "series" %}
+						<details class="cn-tile-opts">
+							<summary>Quality and tracks <svg class="cn-ico is-sm" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+							{% include "searchapp/quality_picker.html" %}
+						</details>
+						{% endif %}
+						<div class="cn-pick-row">
+						{% if result.media_kind == "song" %}
+							<form id="cn-dl-{{ forloop.counter }}" action="{% url 'start_download' %}" method="post">
+								{% csrf_token %}
+								<input type="hidden" name="source_alias" value="{{ result.source_alias }}">
+								<input type="hidden" name="item_payload" value="{{ result.payload_json }}">
+								<label class="cn-mini" title="Audio format">
+									<select name="audio_format" aria-label="Audio format">
+										<option value="flac" selected>FLAC</option>
+										<option value="mp3">MP3</option>
+									</select>
+								</label>
+								<button class="cn-mini is-mark" type="submit">Download</button>
+							</form>
+						{% elif result.is_movie %}
+							<form id="cn-dl-{{ forloop.counter }}" action="{% url 'start_download' %}" method="post"{% if result.media_kind == "movie" %} data-audio-prompt{% endif %}>
+								{% csrf_token %}
+								<input type="hidden" name="source_alias" value="{{ result.source_alias }}">
+								<input type="hidden" name="item_payload" value="{{ result.payload_json }}">
+								<button class="cn-mini is-mark" type="submit">
+									<svg class="cn-ico is-sm" aria-hidden="true"><use href="#i-download"/></svg>Download
+								</button>
+							</form>
+						{% else %}
+							<form id="cn-detail-{{ forloop.counter }}" action="{% url 'series_detail' %}" method="post">
+								{% csrf_token %}
+								<input type="hidden" name="source_alias" value="{{ result.source_alias }}">
+								<input type="hidden" name="item_payload" value="{{ result.payload_json }}">
+							</form>
+							<button class="cn-mini is-mark" type="submit" form="cn-detail-{{ forloop.counter }}">
+								<svg class="cn-ico is-sm" aria-hidden="true"><use href="#i-layers"/></svg>Episodes
+							</button>
+						{% endif %}
+
+						{% if result.media_kind != "book" %}
+							<form action="{% url 'add_to_watchlist' %}" method="post">
+								{% csrf_token %}
+								<input type="hidden" name="source_alias" value="{{ result.source_alias }}">
+								<input type="hidden" name="item_payload" value="{{ result.payload_json }}">
+								<input type="hidden" name="search_query" value="{{ query }}">
+								<input type="hidden" name="search_site" value="{{ result.source_alias }}">
+								<button class="cn-mini is-icon" type="submit" title="Add to watchlist" aria-label="Add to watchlist">
+									<svg class="cn-ico is-sm" aria-hidden="true"><use href="#i-bookmark"/></svg>
+								</button>
+							</form>
+						{% endif %}
+						</div>
+					</div>
 				</article>
 			{% endfor %}
 		</div>
 
-		<p class="cn-empty" id="cn-nokind" hidden style="padding-left:0">
-			No results of this type.
-		</p>
+		<div class="cn-empty" id="cn-nokind" role="status" hidden>No results of this type.</div>
 		<dialog id="cn-movie-audio-dialog" class="cn-audio-dialog" aria-labelledby="cn-audio-dialog-title" aria-describedby="cn-audio-dialog-movie">
 			<h2 id="cn-audio-dialog-title">Choose download audio</h2>
 			<p id="cn-audio-dialog-movie" class="cn-cap"></p>
@@ -188,12 +169,12 @@
 			</div>
 		</dialog>
 	{% else %}
-		<p class="cn-empty" style="padding-left:0">
-			No results for <b>{{ query }}</b>. Try fewer words, or another provider.
-		</p>
-		<p style="margin-top:18px">
-			<a class="cn-cta" href="{% url 'search_page' %}">Back to search</a>
-		</p>
+		<div class="cn-empty is-hero">
+			<svg class="cn-ico is-lg" aria-hidden="true"><use href="#i-search"/></svg>
+			<b>No results for <q data-no-tr>{{ query }}</q></b>
+			<span>Try fewer words, or search on another provider.</span>
+			<a class="cn-cta is-ghost" href="{% url 'search_page' %}">Back to search</a>
+		</div>
 	{% endif %}
 </div>
 {% endblock %}
@@ -211,18 +192,7 @@
 	var CSRF = "{{ csrf_token }}";
 	var tiles = Array.prototype.slice.call(grid.querySelectorAll(".cn-tile"));
 
-	function duotone(text) {
-		var h = 0, s = String(text || "?");
-		for (var i = 0; i < s.length; i++) h += s.charCodeAt(i);
-		h = h % 360;
-		return ["hsl(" + h + " 34% 26%)", "hsl(" + h + " 40% 10%)"];
-	}
-
-	tiles.forEach(function (t) {
-		var d = duotone(t.getAttribute("data-key"));
-		t.style.setProperty("--cn-p1", d[0]);
-		t.style.setProperty("--cn-p2", d[1]);
-	});
+	tiles.forEach(function (t) { CN.paint(t, t.getAttribute("data-key")); });
 
 	var kinds = document.getElementById("cn-kinds");
 	var present = {};
@@ -257,15 +227,15 @@
 	}
 
 	grid.addEventListener("click", function (e) {
-		if (e.target.closest("button, a, form, select, label, .cn-quality-picker")) return;
+		if (e.target.closest(".cn-pick, button, a, form, select, label")) return;
 		var tile = e.target.closest(".cn-tile");
 		if (tile) activate(tile);
 	});
 
 	grid.addEventListener("keydown", function (e) {
-		if (e.key !== "Enter" || e.target.closest("button, a, select")) return;
-		var tile = e.target.closest(".cn-tile");
-		if (tile) { e.preventDefault(); activate(tile); }
+		if (e.key !== "Enter" || !e.target.matches(".cn-tile")) return;
+		e.preventDefault();
+		activate(e.target);
 	});
 
 	{% if tmdb_available %}
