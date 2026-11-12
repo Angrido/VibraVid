@@ -107,7 +107,7 @@ def _build_command_for_hook(hook: dict, stage: str, context: dict[str, Any] | No
     args = hook.get("args", [])
     env = hook.get("env") or {}
     workdir = hook.get("cwd")
-    logger.debug(f"Building command for hook: type='{hook_type}', script_path='{script_path}', inline_command='{inline_command}', args='{args}', env='{env}', workdir='{workdir}'")
+    logger.debug(f"Building command for hook: type='{hook_type}', script_path='{script_path}', inline_command='{inline_command}', args='{args}', env_keys={sorted(env)}, workdir='{workdir}'")
 
     if isinstance(args, str):
         args = [arg for arg in args.split(" ") if arg]
@@ -142,7 +142,7 @@ def _build_command_for_hook(hook: dict, stage: str, context: dict[str, Any] | No
         if not script_path:
             raise ValueError("Missing 'path' for python hook")
         command = [sys.executable, script_path] + formatted_args
-        logger.debug(f"Constructed python hook command: {command} with env: {base_env} and cwd: {workdir}")
+        logger.debug(f"Constructed python hook command: {command} and cwd: {workdir}")
         return ([item for item in command if item], {"env": base_env, "cwd": workdir})
 
     if os_manager.system in ("linux", "darwin"):
@@ -153,7 +153,7 @@ def _build_command_for_hook(hook: dict, stage: str, context: dict[str, Any] | No
                 if not script_path:
                     raise ValueError("Missing 'path' for bash/sh hook")
                 command = ["/bin/bash", script_path] + formatted_args
-            logger.debug(f"Constructed shell hook command: {command} with env: {base_env} and cwd: {workdir}")
+            logger.debug(f"Constructed shell hook command: {command} and cwd: {workdir}")
             return (command, {"env": base_env, "cwd": workdir})
 
     if os_manager.system == "windows":
@@ -164,7 +164,7 @@ def _build_command_for_hook(hook: dict, stage: str, context: dict[str, Any] | No
                 if not script_path:
                     raise ValueError("Missing 'path' for bat/cmd hook")
                 command = ["cmd", "/c", script_path] + formatted_args
-            logger.debug(f"Constructed shell hook command: {command} with env: {base_env} and cwd: {workdir}")
+            logger.debug(f"Constructed shell hook command: {command} and cwd: {workdir}")
             return (command, {"env": base_env, "cwd": workdir})
 
     raise ValueError(f"Unsupported hook type '{hook_type}' on OS '{os_manager.system}'")

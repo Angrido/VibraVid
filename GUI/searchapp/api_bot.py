@@ -54,9 +54,10 @@ def require_bot_secret(view):
 
 def _json_body(request: HttpRequest) -> dict:
     try:
-        return json.loads(request.body.decode("utf-8"))
+        body = json.loads(request.body.decode("utf-8"))
     except (ValueError, TypeError):
         return {}
+    return body if isinstance(body, dict) else {}
 
 
 @csrf_exempt
@@ -117,7 +118,7 @@ def bot_seasons(request: HttpRequest) -> JsonResponse:
     body = _json_body(request)
     site = str(body.get("site") or "").strip()
     payload = body.get("payload") or {}
-    if not site or not payload:
+    if not site or not payload or not isinstance(payload, dict):
         return JsonResponse({"error": "parametri mancanti"}, status=400)
     try:
         api = get_api(site)
@@ -142,7 +143,7 @@ def bot_download(request: HttpRequest) -> JsonResponse:
     payload = body.get("payload") or {}
     season = str(body.get("season") or "").strip() or None
     episodes = str(body.get("episodes") or "").strip() or None
-    if not site or not payload:
+    if not site or not payload or not isinstance(payload, dict):
         return JsonResponse({"error": "parametri mancanti"}, status=400)
 
     item_type = str(payload.get("type") or "").lower()

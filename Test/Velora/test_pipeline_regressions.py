@@ -25,10 +25,12 @@ CHECKED_DIRS = [
 
 
 def test_decrypt_and_mux_modules_have_no_undefined_or_shadowed_names():
-    if shutil.which("ruff") is None:
+    ruff_binary = shutil.which("ruff")
+    if ruff_binary is None:
         pytest.importorskip("ruff")
+    ruff_command = [ruff_binary] if ruff_binary else [sys.executable, "-m", "ruff"]
     result = subprocess.run(
-        [sys.executable, "-m", "ruff", "check", "--isolated", "--no-cache", "--select", "F821,F822,F823,F811,F841", *CHECKED_DIRS],
+        [*ruff_command, "check", "--isolated", "--no-cache", "--select", "F821,F822,F823,F811,F841", *CHECKED_DIRS],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,

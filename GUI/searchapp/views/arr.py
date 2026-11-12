@@ -12,6 +12,7 @@ from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
+from .. import security
 from ..models import ArrMediaRequest, ArrProcessingQueue
 from ._shared import _is_recent_webhook, _mark_native_webhook_seen
 
@@ -118,13 +119,9 @@ def seerr_webhook(request: HttpRequest) -> JsonResponse:
             return _manual_mode_response("SEERR")
 
         # Validate webhook token
-        expected_secret = cfg.get("seerr", {}).get("webhook_secret", "")
-        if expected_secret:
-            token = request.headers.get("X-Webhook-Token", "")
-            logger.info(f"[SEERR WEBHOOK] Validating token: {'present' if token else 'missing'}")
-            if token != expected_secret:
-                logger.warning("[SEERR WEBHOOK] Invalid webhook token")
-                return JsonResponse({"status": "error", "message": "Invalid webhook token"}, status=403)
+        if not security.webhook_token_valid(request, cfg.get("seerr", {}).get("webhook_secret", "")):
+            logger.warning("[SEERR WEBHOOK] Missing or invalid webhook token")
+            return JsonResponse({"status": "error", "message": "Invalid webhook token"}, status=403)
 
         # Parse payload
         try:
@@ -265,13 +262,9 @@ def sonarr_webhook(request: HttpRequest) -> JsonResponse:
         if not automatic_downloads_enabled(cfg):
             return _manual_mode_response("SONARR")
 
-        expected_secret = cfg.get("sonarr_webhook", {}).get("webhook_secret", "")
-        if expected_secret:
-            token = request.headers.get("X-Webhook-Token", "")
-            logger.info(f"[SONARR WEBHOOK] Validating token: {'present' if token else 'missing'}")
-            if token != expected_secret:
-                logger.warning("[SONARR WEBHOOK] Invalid webhook token")
-                return JsonResponse({"status": "error", "message": "Invalid webhook token"}, status=403)
+        if not security.webhook_token_valid(request, cfg.get("sonarr_webhook", {}).get("webhook_secret", "")):
+            logger.warning("[SONARR WEBHOOK] Missing or invalid webhook token")
+            return JsonResponse({"status": "error", "message": "Invalid webhook token"}, status=403)
 
         try:
             payload = json.loads(request.body.decode("utf-8"))
@@ -403,13 +396,9 @@ def radarr_webhook(request: HttpRequest) -> JsonResponse:
         if not automatic_downloads_enabled(cfg):
             return _manual_mode_response("RADARR")
 
-        expected_secret = cfg.get("radarr_webhook", {}).get("webhook_secret", "")
-        if expected_secret:
-            token = request.headers.get("X-Webhook-Token", "")
-            logger.info(f"[RADARR WEBHOOK] Validating token: {'present' if token else 'missing'}")
-            if token != expected_secret:
-                logger.warning("[RADARR WEBHOOK] Invalid webhook token")
-                return JsonResponse({"status": "error", "message": "Invalid webhook token"}, status=403)
+        if not security.webhook_token_valid(request, cfg.get("radarr_webhook", {}).get("webhook_secret", "")):
+            logger.warning("[RADARR WEBHOOK] Missing or invalid webhook token")
+            return JsonResponse({"status": "error", "message": "Invalid webhook token"}, status=403)
 
         try:
             payload = json.loads(request.body.decode("utf-8"))

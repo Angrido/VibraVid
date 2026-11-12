@@ -97,6 +97,14 @@ def test_bot_post_endpoints_treat_a_body_that_is_not_json_as_empty(client, monke
     assert response.status_code == 400
 
 
+@pytest.mark.parametrize("url", BOT_POST)
+@pytest.mark.parametrize("body", [[], "text", 3, {"site": "x", "payload": ["not", "a", "dict"]}])
+def test_bot_post_endpoints_reject_json_that_is_not_an_object(client, monkeypatch, url, body):
+    monkeypatch.delenv("VIBRAVID_BOT_SECRET", raising=False)
+
+    assert _post(client, url, body).status_code == 400
+
+
 @pytest.mark.parametrize("url", BOT_GET)
 def test_bot_get_endpoints_refuse_post(client, monkeypatch, url):
     monkeypatch.delenv("VIBRAVID_BOT_SECRET", raising=False)
