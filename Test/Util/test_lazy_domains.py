@@ -118,3 +118,47 @@ def test_offline_setting_without_a_local_file_still_downloads_once(tmp_path, pre
 
     assert manager.domain.get("examplesite", "full_url") == "https://online.example/"
     assert prefetch["calls"] == 1
+
+
+def test_an_approved_domain_replaces_the_published_one_and_survives_a_reload(tmp_path):
+    manager = _manager(tmp_path)
+    manager._load_site_data()
+
+    manager.approve_domain("examplesite", "https://moved.example/")
+
+    assert manager.domain.get("examplesite", "full_url") == "https://moved.example/"
+    assert json.loads((tmp_path / "domains.json").read_text(encoding="utf-8")) == ONLINE
+    reloaded = _manager(tmp_path)
+    reloaded._load_site_data()
+    assert reloaded.domain.get("examplesite", "full_url") == "https://moved.example/"
+
+
+def test_an_approved_domain_gives_way_once_the_published_list_changes(tmp_path, prefetch):
+    manager = _manager(tmp_path)
+    manager._load_site_data()
+    manager.approve_domain("examplesite", "https://moved.example/")
+
+    prefetch["collect"] = {"examplesite": {"full_url": "https://newer.example/"}}
+    reloaded = _manager(tmp_path)
+    reloaded._load_site_data()
+
+    assert reloaded.domain.get("examplesite", "full_url") == "https://newer.example/"
+
+
+def test_approving_the_published_domain_drops_the_override(tmp_path):
+    manager = _manager(tmp_path)
+    manager._load_site_data()
+    manager.approve_domain("examplesite", "https://moved.example/")
+
+    manager.approve_domain("examplesite", "https://online.example/")
+
+    assert manager.domain.get("examplesite", "full_url") == "https://online.example/"
+    assert json.loads((tmp_path / "domain_overrides.json").read_text(encoding="utf-8")) == {}
+
+
+def test_a_site_without_a_published_domain_cannot_be_overridden(tmp_path):
+    manager = _manager(tmp_path)
+    manager._load_site_data()
+
+    with pytest.raises(ValueError):
+        manager.approve_domain("raiplay", "https://elsewhere.example/")

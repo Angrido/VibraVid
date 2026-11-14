@@ -614,5 +614,10 @@
   "Every {n} h": "Ogni {n} h",
   "Italian audio check": "Controllo audio italiano",
   "Open on the provider": "Apri sul provider",
-  "Open on the provider: {provider}": "Apri sul provider: {provider}"
+  "Open on the provider: {provider}": "Apri sul provider: {provider}",
+  "Domain changed": "Dominio cambiato",
+  "Now redirects to": "Ora reindirizza a",
+  "Use the new link": "Usa il nuovo link",
+  "Now using {host}": "Ora usa {host}",
+  "Could not replace the link: {error}": "Impossibile sostituire il link: {error}"
 }

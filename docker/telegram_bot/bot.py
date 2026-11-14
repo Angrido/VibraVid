@@ -50,6 +50,12 @@ async def main() -> None:
             break
         await asyncio.sleep(60)
 
+    if not state.cfg.restricted and not state.cfg.allow_everyone:
+        state.log.warning(
+            "TG_ALLOWED_USERS is empty: the bot answers nobody. Set it to your numeric Telegram ID "
+            "(the bot replies with it when you write to it), or TG_ALLOW_EVERYONE=1 to open it to anyone."
+        )
+
     state.client = TelegramClient(str(state.STATE_DIR / "telegram_bot"), state.cfg.api_id, state.cfg.api_hash)
     await state.client.start(bot_token=state.cfg.bot_token)
     state.client.parse_mode = None

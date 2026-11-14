@@ -106,6 +106,10 @@ class Config:
         return bool(os.getenv("TG_ALLOWED_USERS", "").replace(" ", "").strip(","))
 
     @property
+    def allow_everyone(self) -> bool:
+        return os.getenv("TG_ALLOW_EVERYONE", "").strip().lower() in {"1", "true", "yes", "on"}
+
+    @property
     def max_results(self) -> int:
         try:
             return int(self._get("max_results", "TG_MAX_RESULTS", "8"))

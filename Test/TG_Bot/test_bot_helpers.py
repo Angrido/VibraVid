@@ -37,7 +37,7 @@ HEADER = "X-VibraVid-Token"
 
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch):
-    for name in ("TG_ALLOWED_USERS", "TG_GUI_URL", "VIBRAVID_BOT_SECRET", "TG_MAX_RESULTS"):
+    for name in ("TG_ALLOWED_USERS", "TG_ALLOW_EVERYONE", "TG_GUI_URL", "VIBRAVID_BOT_SECRET", "TG_MAX_RESULTS"):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -164,8 +164,21 @@ def _event(sender_id):
     return SimpleNamespace(sender_id=sender_id)
 
 
-def test_everyone_is_allowed_when_no_allow_list_is_set():
+def test_nobody_is_allowed_when_no_allow_list_is_set():
+    assert common.is_allowed(_event(1)) is False
+
+
+def test_everyone_is_allowed_only_when_explicitly_opened(monkeypatch):
+    monkeypatch.setenv("TG_ALLOW_EVERYONE", "1")
+
     assert common.is_allowed(_event(1)) is True
+
+
+def test_an_allow_list_wins_over_allow_everyone(monkeypatch):
+    monkeypatch.setenv("TG_ALLOW_EVERYONE", "1")
+    monkeypatch.setenv("TG_ALLOWED_USERS", "10")
+
+    assert common.is_allowed(_event(99)) is False
 
 
 def test_allow_list_restricts_the_bot(monkeypatch):

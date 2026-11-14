@@ -12,7 +12,7 @@ python GUI/manage.py migrate
 python GUI/manage.py runserver 0.0.0.0:8000
 ```
 
-Open `http://<host>:8000`. For Docker/NAS use the [Docker](docker.md) and [NAS](nas.md) guides instead of the dev server.
+Open `http://<host>:8000`. Without a login (`VIBRAVID_USERNAME`/`VIBRAVID_PASSWORD`) and without `ALLOWED_HOSTS`, the GUI only answers on IP addresses and local names (`localhost`, `nas`, `nas.local`, `*.lan`, `*.home.arpa`, `*.internal`): a page on another site cannot reach it through DNS rebinding. To open it on a domain name, add the name to `ALLOWED_HOSTS` or turn the login on. For Docker/NAS use the [Docker](docker.md) and [NAS](nas.md) guides instead of the dev server.
 
 ## Features
 
@@ -87,6 +87,10 @@ Translations live in `GUI/searchapp/i18n/<code>.json`: a flat object that maps t
 ### Login
 
 By default the GUI has no login. Set `VIBRAVID_USERNAME` and `VIBRAVID_PASSWORD` to require one on every page (5 failed attempts per address lock the login for 5 minutes). After a wrong password the username stays filled in and the password field gets the focus. Webhooks, the Telegram bot (`VIBRAVID_BOT_SECRET`) and the remote API keep their own tokens; with the login on, a webhook without its `webhook_secret` and a bot without `VIBRAVID_BOT_SECRET` are refused. See [Securing the GUI](docker.md#securing-the-gui).
+
+### Provider status and domain changes
+
+Settings -> *Overview* -> **Providers** checks every site with a URL and marks it Online, Error, Unreachable or **Domain changed**. A site whose address now redirects to another domain shows the new link and a **Use the new link** button. Nothing is replaced until you press it. The choice is saved in `Conf/domain_overrides.json` and applies to the CLI, TUI and GUI. It stays until the published domain list (`domains.json`) moves to a different address, which then takes over again.
 
 ### Custom service upload
 

@@ -360,8 +360,8 @@ use_proxy = false
 proxy_scope = "scrap+down"
 
 [REQUESTS.proxy]
-http = "http://localhost:8888"
-https = "http://localhost:8888"
+http = ""     # e.g. "http://localhost:8888", used when use_proxy = true
+https = ""
 ```
 
 | Key | Default | Description |

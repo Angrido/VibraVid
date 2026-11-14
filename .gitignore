@@ -51,6 +51,7 @@ start.sh
 .DS_Store
 GUI/db.sqlite3
 Conf/domains.json
+Conf/domain_overrides.json
 Conf/login.toml
 Conf/remote.json
 Conf/migration-*/

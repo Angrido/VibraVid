@@ -21,7 +21,8 @@ max_results = 8
 |---|---|---|
 | `TG_BOT_TOKEN` | yes | Token from BotFather |
 | `TG_API_ID` / `TG_API_HASH` | yes | From https://my.telegram.org |
-| `TG_ALLOWED_USERS` | recommended | Comma-separated numeric Telegram IDs allowed to use the bot; empty = everyone |
+| `TG_ALLOWED_USERS` | yes | Comma-separated numeric Telegram IDs allowed to use the bot; empty = nobody. The bot replies to unknown users with their ID |
+| `TG_ALLOW_EVERYONE` | no | `1` opens the bot to anyone when `TG_ALLOWED_USERS` is empty |
 | `TG_GUI_URL` | no | Internal GUI URL (default `http://vibravid:8000`) |
 | `VIBRAVID_BOT_SECRET` | no | Shared secret authenticating the bot to the GUI (`X-VibraVid-Token`); must also be set on the GUI side |
 

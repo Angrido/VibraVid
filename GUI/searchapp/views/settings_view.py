@@ -278,12 +278,19 @@ def _deep_merge(base: dict, patch: dict) -> dict:
     return merged
 
 
+def _local_cdm_loaders(cfg: dict) -> dict:
+    drm = cfg.get("DRM") if isinstance(cfg.get("DRM"), dict) else {}
+    local_cdms = drm.get("local_cdm") if isinstance(drm.get("local_cdm"), dict) else {}
+    return {cdm_id: block.get("loader") for cdm_id, block in local_cdms.items() if isinstance(block, dict)}
+
+
 def _executable_surface(cfg: dict) -> tuple:
-    """The settings that make VibraVid run commands or import code: [HOOKS] and ``imp_service``."""
+    """The settings that make VibraVid run commands or import code: [HOOKS], ``imp_service`` and local CDM loaders."""
     default = cfg.get("DEFAULT") if isinstance(cfg.get("DEFAULT"), dict) else {}
     return (json.dumps(cfg.get("HOOKS"), sort_keys=True, default=str),
             json.dumps(default.get("imp_service"), sort_keys=True, default=str),
-            json.dumps(cfg.get("imp_service"), sort_keys=True, default=str))
+            json.dumps(cfg.get("imp_service"), sort_keys=True, default=str),
+            json.dumps(_local_cdm_loaders(cfg), sort_keys=True, default=str))
 
 
 def _changes_executable_surface(file_path: str, content: str | None, patch: dict | None, delete: list) -> bool:
@@ -352,7 +359,7 @@ def save_settings(request: HttpRequest) -> JsonResponse:
                 and _changes_executable_surface(file_path, content, patch, data.get('delete') or [])):
             return JsonResponse({
                 "success": False,
-                "error": "Changing [HOOKS] or imp_service is disabled: they run commands/code on the server. "
+                "error": "Changing [HOOKS], imp_service or a local CDM loader is disabled: they run commands/code on the server. "
                          "Set VIBRAVID_ALLOW_SERVICE_UPLOAD=1 to enable it, or edit config.toml on disk.",
             }, status=403)
 

@@ -1,10 +1,30 @@
 # 01.11.26
 
-from django.http import JsonResponse
+import logging
+
+from django.http import HttpResponseBadRequest, JsonResponse
+from django.http.request import split_domain_port
 from django.shortcuts import redirect
 from django.utils.http import urlencode
 
 from . import security
+
+logger = logging.getLogger(__name__)
+
+
+class LocalHostOnlyMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        host, _ = split_domain_port(request.get_host())
+        if security.foreign_host_blocked(host):
+            logger.warning(
+                "Refused request for host %r: without a login the GUI only answers on IP addresses and local names. "
+                "Add it to ALLOWED_HOSTS or set VIBRAVID_USERNAME/VIBRAVID_PASSWORD.", host
+            )
+            return HttpResponseBadRequest("Host not allowed: add it to ALLOWED_HOSTS.")
+        return self.get_response(request)
 
 
 class LoginRequiredMiddleware:

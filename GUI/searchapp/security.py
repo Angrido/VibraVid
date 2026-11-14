@@ -1,6 +1,7 @@
 # 01.11.26
 
 import hmac
+import ipaddress
 import logging
 import os
 import threading
@@ -35,6 +36,24 @@ def gui_auth_enabled() -> bool:
 
 def service_upload_allowed() -> bool:
     return _env("VIBRAVID_ALLOW_SERVICE_UPLOAD").lower() in {"1", "true", "yes", "on"}
+
+
+LOCAL_NAME_SUFFIXES = (".local", ".lan", ".home.arpa", ".internal")
+
+
+def is_local_host(host: str) -> bool:
+    host = host.strip("[]").rstrip(".").lower()
+    if not host:
+        return False
+    try:
+        ipaddress.ip_address(host)
+        return True
+    except ValueError:
+        return "." not in host or host.endswith(LOCAL_NAME_SUFFIXES)
+
+
+def foreign_host_blocked(host: str) -> bool:
+    return not _env("ALLOWED_HOSTS") and not gui_auth_enabled() and not is_local_host(host)
 
 
 def check_credentials(username: str, password: str) -> bool:

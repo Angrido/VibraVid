@@ -159,15 +159,18 @@ def _site_view(options: list[dict], selected: str, page: int, token: str) -> tup
 
 def is_allowed(event) -> bool:
     state.cfg.refresh()
-    if not state.cfg.restricted:
-        return True
-    return event.sender_id in state.cfg.allowed_users
+    if state.cfg.restricted:
+        return event.sender_id in state.cfg.allowed_users
+    return state.cfg.allow_everyone
 
 
 async def deny(event) -> None:
     state.log.warning("Access denied: %s", event.sender_id)
     try:
-        await event.respond("You are not authorized to use this bot.")
+        await event.respond(
+            f"You are not authorized to use this bot. Your Telegram ID is {event.sender_id}: "
+            "the owner can add it to TG_ALLOWED_USERS."
+        )
     except (RPCError, OSError):
         pass
 
