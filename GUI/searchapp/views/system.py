@@ -13,7 +13,7 @@ from VibraVid.utils import config_manager
 
 from .. import services_admin
 from ..security import require_service_upload
-from ..site_reachability import check_sites
+from ..site_reachability import check_site, check_sites, forget_results, site_url
 from ._shared import _UPDATE_CHECK_TTL, _update_check_cache
 
 logger = logging.getLogger(__name__)
@@ -23,6 +23,27 @@ logger = logging.getLogger(__name__)
 def site_status(request: HttpRequest) -> JsonResponse:
     refresh = request.GET.get("refresh") == "1"
     return JsonResponse({"sites": check_sites(sorted(get_available_sites()), refresh=refresh)})
+
+
+@require_http_methods(["POST"])
+def apply_site_domain(request: HttpRequest) -> JsonResponse:
+    try:
+        site = str(json.loads(request.body.decode("utf-8")).get("site") or "")
+    except (ValueError, UnicodeDecodeError, AttributeError):
+        site = ""
+    if site not in get_available_sites():
+        return JsonResponse({"success": False, "error": "Unknown provider."}, status=400)
+
+    result = check_site(site, site_url(site))
+    if result["state"] != "moved":
+        return JsonResponse({"success": False, "error": "The site no longer redirects: nothing to replace."}, status=409)
+    try:
+        config_manager.approve_domain(site, result["proposed_url"])
+    except ValueError as exc:
+        return JsonResponse({"success": False, "error": str(exc)}, status=400)
+
+    forget_results()
+    return JsonResponse({"success": True, "site": site, "url": result["proposed_url"], "host": result["final_host"]})
 
 
 @require_http_methods(["GET"])
@@ -214,6 +235,7 @@ def trigger_update(request: HttpRequest) -> JsonResponse:
 
 __all__ = [
     'site_status',
+    'apply_site_domain',
     'registry_status', 'site_cli_options_schema', 'reload_config',
     'check_updates', 'trigger_binaries_update', 'dependencies_status', 'refresh_external_import', 'trigger_update',
 ]

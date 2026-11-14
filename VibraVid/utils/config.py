@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 CONFIG_FILENAME = "config.toml"
 LOGIN_FILENAME = "login.toml"
 DOMAINS_FILENAME = "domains.json"
+DOMAIN_OVERRIDES_FILENAME = "domain_overrides.json"
 GITHUB_DOMAINS_PATH = ".github/script/domains.json"
 
 CONFIG_DOWNLOAD_URL = "https://raw.githubusercontent.com/AstraeLabs/VibraVid/refs/heads/main/Conf/config.toml"
@@ -446,6 +447,7 @@ class ConfigManager:
         self._config_data = {}
         self._login_data = {}
         self._domains_data = {}
+        self._domains_raw = {}
 
         # Enhanced caching system
         self.cache: dict[str, Any] = {}
@@ -708,16 +710,53 @@ class ConfigManager:
             time.sleep(DOMAIN_REFRESH_INTERVAL_SECONDS)
             try:
                 data = _startup_prefetch._fetch_domains()
-                self._domains_data.clear()
-                self._domains_data.update(data)
+                self._set_domains(data)
                 self._save_domains_to_appropriate_location()
-
-                stale = [key for key in self.cache if key.startswith("domain.")]
-                for key in stale:
-                    del self.cache[key]
                 logger.info("Domains refreshed in background (%d entries).", len(self._domains_data))
             except Exception as e:
                 logger.warning(f"Background domain refresh failed: {e}")
+
+    @property
+    def domain_overrides_path(self) -> str:
+        return os.path.join(os.path.dirname(self.domains_path), DOMAIN_OVERRIDES_FILENAME)
+
+    def _read_domain_overrides(self) -> dict:
+        try:
+            with open(self.domain_overrides_path, encoding="utf-8") as f:
+                overrides = json.load(f)
+        except FileNotFoundError:
+            return {}
+        except (OSError, ValueError) as e:
+            logger.warning(f"Ignoring unreadable {DOMAIN_OVERRIDES_FILENAME}: {e}")
+            return {}
+        return overrides if isinstance(overrides, dict) else {}
+
+    def _set_domains(self, data: dict) -> None:
+        self._domains_raw = data if isinstance(data, dict) else {}
+        merged = {site: dict(entry) if isinstance(entry, dict) else entry for site, entry in self._domains_raw.items()}
+        for site, override in self._read_domain_overrides().items():
+            entry = merged.get(site)
+            if isinstance(entry, dict) and isinstance(override, dict) and entry.get("full_url") == override.get("replaces"):
+                entry["full_url"] = override.get("full_url")
+        self._domains_data.clear()
+        self._domains_data.update(merged)
+        for key in [key for key in self.cache if key.startswith("domain.")]:
+            del self.cache[key]
+
+    def approve_domain(self, site: str, full_url: str) -> None:
+        self._ensure_domains()
+        with self._domains_lock:
+            entry = self._domains_raw.get(site)
+            if not isinstance(entry, dict) or not entry.get("full_url"):
+                raise ValueError(f"'{site}' has no domain to replace")
+            overrides = self._read_domain_overrides()
+            if entry["full_url"] == full_url:
+                overrides.pop(site, None)
+            else:
+                overrides[site] = {"full_url": full_url, "replaces": entry["full_url"]}
+            self._write_toml(self.domain_overrides_path, json.dumps(overrides, indent=4, ensure_ascii=False))
+            self._set_domains(self._domains_raw)
+        logger.info(f"Domain of {site} set to {full_url} by the user")
 
     def _load_site_data_online(self) -> None:
         """Start fetching the domains from GitHub; the first domain read waits for them (see _ensure_domains)."""
@@ -739,8 +778,7 @@ class ConfigManager:
             data = _startup_prefetch.collect("domains", timeout=5)
 
             if data is not None:
-                self._domains_data.clear()
-                self._domains_data.update(data)
+                self._set_domains(data)
                 self._save_domains_to_appropriate_location()
 
             else:
@@ -755,7 +793,7 @@ class ConfigManager:
         """Save domains to the conf directory."""
         try:
             with open(self.domains_path, "w", encoding="utf-8") as f:
-                json.dump(self._domains_data, f, indent=4, ensure_ascii=False)
+                json.dump(self._domains_raw, f, indent=4, ensure_ascii=False)
         except Exception as save_error:
             console.print(f"[red]Could not save domains to file: {str(save_error)}")
 
@@ -764,8 +802,7 @@ class ConfigManager:
         try:
             if os.path.exists(self.domains_path):
                 with open(self.domains_path, encoding="utf-8") as f:
-                    self._domains_data.clear()
-                    self._domains_data.update(json.load(f))
+                    self._set_domains(json.load(f))
 
                 site_count = len(self._domains_data) if isinstance(self._domains_data, dict) else 0
 
@@ -774,8 +811,7 @@ class ConfigManager:
                 logger.info(f"Loading domains from GitHub structure: {self.github_domains_path}")
 
                 with open(self.github_domains_path, encoding="utf-8") as f:
-                    self._domains_data.clear()
-                    self._domains_data.update(json.load(f))
+                    self._set_domains(json.load(f))
 
                 site_count = len(self._domains_data) if isinstance(self._domains_data, dict) else 0
                 console.print(f"[green]Domains loaded from GitHub structure: {site_count} streaming services")
@@ -788,11 +824,11 @@ class ConfigManager:
                     return
 
                 console.print("[dim]Domain path: Disabled[/dim]")
-                self._domains_data.clear()
+                self._set_domains({})
 
         except Exception as e:
             console.print(f"[red]Local domain file error: {str(e)}")
-            self._domains_data.clear()
+            self._set_domains({})
 
     def _handle_site_data_fallback(self) -> None:
         """Handle site data fallback in case of error."""
@@ -801,8 +837,7 @@ class ConfigManager:
 
             try:
                 with open(self.domains_path, encoding="utf-8") as f:
-                    self._domains_data.clear()
-                    self._domains_data.update(json.load(f))
+                    self._set_domains(json.load(f))
                 logger.info("Fallback to conf domains.json successful")
                 return
             except Exception as fallback_error:
@@ -812,15 +847,14 @@ class ConfigManager:
             logger.info(f"Attempting fallback to GitHub structure domains file: {self.github_domains_path}")
             try:
                 with open(self.github_domains_path, encoding="utf-8") as f:
-                    self._domains_data.clear()
-                    self._domains_data.update(json.load(f))
+                    self._set_domains(json.load(f))
                 logger.info("Fallback to GitHub structure domains.json successful")
                 return
             except Exception as fallback_error:
                 console.print(f"[red]GitHub structure fallback failed: {str(fallback_error)}")
 
         console.print("[red]No local domains.json file available for fallback")
-        self._domains_data.clear()
+        self._set_domains({})
 
     def reload(self) -> None:
         """Reload all configuration files and clear cached values."""

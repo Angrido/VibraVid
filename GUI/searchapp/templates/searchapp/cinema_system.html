@@ -370,6 +370,7 @@
 	var URL_IMPORT = "{% url 'refresh_external_import' %}";
 	var URL_CLI_OPTIONS = "{% url 'site_cli_options_schema' %}";
 	var URL_SITE_STATUS = "{% url 'site_status' %}";
+	var URL_SITE_DOMAIN = "{% url 'apply_site_domain' %}";
 	var CSRF         = "{{ csrf_token }}";
 
 	function el(id) { return document.getElementById(id); }
@@ -411,6 +412,34 @@
 		link.rel = "noopener noreferrer";
 		link.textContent = info.final_host;
 		note.append(link);
+		if (!info.proposed_url) return;
+		var use = document.createElement("button");
+		use.type = "button";
+		use.className = "cn-cta is-ghost is-sm";
+		use.textContent = t("Use the new link");
+		use.addEventListener("click", function () { applyDomain(row, info, use); });
+		note.append(use);
+	}
+
+	function applyDomain(row, info, button) {
+		button.disabled = true;
+		post(URL_SITE_DOMAIN, JSON.stringify({ site: row.dataset.site }), true)
+			.then(function (data) {
+				if (!data.success) throw new Error(data.error || "HTTP error");
+				var current = row.querySelector(".cn-s a");
+				if (current) {
+					current.href = data.url;
+					current.textContent = data.host;
+				}
+				paintSite(row, { state: "up" });
+				var note = row.querySelector("[data-site-note]");
+				note.hidden = false;
+				note.textContent = t("Now using {host}").replace("{host}", data.host);
+			})
+			.catch(function (err) {
+				button.disabled = false;
+				say(el("cn-site-summary"), t("Could not replace the link: {error}").replace("{error}", err.message), "bad");
+			});
 	}
 
 	function checkSites(refresh) {

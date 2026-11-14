@@ -69,11 +69,18 @@ def check_site(site: str, url: str) -> dict:
     result["http_status"] = response.status_code
     if not _same_site(result["final_host"], site_host(url)):
         result["state"] = "moved"
+        parts = urlsplit(final_url)
+        result["proposed_url"] = f"{parts.scheme}://{parts.netloc}/"
     elif response.status_code >= 400:
         result["state"] = "error"
     else:
         result["state"] = "up"
     return result
+
+
+def forget_results() -> None:
+    with _cache_lock:
+        _cached_results["at"] = 0.0
 
 
 def check_sites(sites: list[str], refresh: bool = False) -> list[dict]:
