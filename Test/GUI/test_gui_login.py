@@ -119,6 +119,28 @@ def test_hooks_and_imp_service_edits_are_blocked_unless_enabled(monkeypatch, tmp
     assert "pwned" not in cfg.read_text(encoding="utf-8")
 
 
+def test_local_cdm_loader_edits_are_blocked_unless_enabled(monkeypatch, tmp_path):
+    from VibraVid.utils import config_manager
+
+    monkeypatch.delenv("VIBRAVID_ALLOW_SERVICE_UPLOAD", raising=False)
+    cfg = tmp_path / "config.toml"
+    cfg.write_text('[DRM.local_cdm.edge]\nsystem = "playready"\npath = "/old/device"\n', encoding="utf-8")
+    monkeypatch.setattr(config_manager, "config_file_path", str(cfg))
+
+    client = Client()
+
+    def save(**body):
+        return client.post("/api/save-settings/", data=json.dumps({"file_type": "config", **body}),
+                           content_type="application/json", HTTP_HOST="127.0.0.1")
+
+    assert save(patch={"DRM": {"local_cdm": {"edge": {"loader": "/tmp/evil.py"}}}}).status_code == 403
+    assert save(patch={"DRM": {"local_cdm": {"new": {"loader": "/tmp/evil.py"}}}}).status_code == 403
+    assert save(content='[DRM.local_cdm.x]\nloader = "/tmp/evil.py"\n').status_code == 403
+    assert "evil" not in cfg.read_text(encoding="utf-8")
+    monkeypatch.setattr(config_manager, "patch_file", lambda *a, **k: cfg.read_text(encoding="utf-8"))
+    assert save(patch={"DRM": {"local_cdm": {"edge": {"path": "/new/device"}}}}).status_code == 200
+
+
 def test_invalid_toml_error_does_not_echo_the_parser_message(monkeypatch, tmp_path):
     """Code-scanning alert 67 (py/stack-trace-exposure): the parser text stays in the log."""
     from VibraVid.utils import config_manager
@@ -158,3 +180,4 @@ def test_webhook_without_secret_is_refused_when_login_is_on(auth_on, monkeypatch
     monkeypatch.setattr(arr_service, "_load_arr_config", lambda: {"enabled": True, "enable_radarr_webhook": True})
     response = Client().post("/api/arr/webhook/radarr/", data="{}", content_type="application/json", HTTP_HOST="127.0.0.1")
     assert response.status_code == 403
+
