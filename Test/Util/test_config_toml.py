@@ -90,6 +90,13 @@ def test_shipped_files_are_valid_toml(name):
     tomllib.loads(_read(workspace_root / "Conf" / f"{name}.toml"))
 
 
+def test_shipped_config_has_no_proxy_or_local_cdm_from_a_developer_machine():
+    config = tomllib.loads(_read(workspace_root / "Conf" / "config.toml"))
+
+    assert not any(config["REQUESTS"]["proxy"].values())
+    assert "local_cdm" not in config["DRM"]
+
+
 def test_shipped_config_documents_vaults_remote_cdm_and_select_audio():
     text = _read(workspace_root / "Conf" / "config.toml")
     assert "[DRM.vault.default]" in text
