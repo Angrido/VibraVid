@@ -39,8 +39,9 @@ def apply_site_domain(request: HttpRequest) -> JsonResponse:
         return JsonResponse({"success": False, "error": "The site no longer redirects: nothing to replace."}, status=409)
     try:
         config_manager.approve_domain(site, result["proposed_url"])
-    except ValueError as exc:
-        return JsonResponse({"success": False, "error": str(exc)}, status=400)
+    except ValueError:
+        logger.warning("Domain of %s not replaced: it has no published domain", site, exc_info=True)
+        return JsonResponse({"success": False, "error": "This provider has no published domain to replace."}, status=400)
 
     forget_results()
     return JsonResponse({"success": True, "site": site, "url": result["proposed_url"], "host": result["final_host"]})
