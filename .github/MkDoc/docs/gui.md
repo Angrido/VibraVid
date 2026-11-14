@@ -12,7 +12,7 @@ python GUI/manage.py migrate
 python GUI/manage.py runserver 0.0.0.0:8000
 ```
 
-Open `http://<host>:8000`. For Docker/NAS use the [Docker](docker.md) and [NAS](nas.md) guides instead of the dev server.
+Open `http://<host>:8000`. Without a login (`VIBRAVID_USERNAME`/`VIBRAVID_PASSWORD`) and without `ALLOWED_HOSTS`, the GUI only answers on IP addresses and local names (`localhost`, `nas`, `nas.local`, `*.lan`, `*.home.arpa`, `*.internal`): a page on another site cannot reach it through DNS rebinding. To open it on a domain name, add the name to `ALLOWED_HOSTS` or turn the login on. For Docker/NAS use the [Docker](docker.md) and [NAS](nas.md) guides instead of the dev server.
 
 ## Features
 

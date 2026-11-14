@@ -181,3 +181,28 @@ def test_webhook_without_secret_is_refused_when_login_is_on(auth_on, monkeypatch
     response = Client().post("/api/arr/webhook/radarr/", data="{}", content_type="application/json", HTTP_HOST="127.0.0.1")
     assert response.status_code == 403
 
+
+@pytest.mark.parametrize("host", ["127.0.0.1:8000", "192.168.1.50", "[::1]:8000", "localhost", "vibravid", "nas.local", "box.home.arpa"])
+def test_without_login_the_gui_answers_on_ip_addresses_and_local_names(monkeypatch, host):
+    for name in ("ALLOWED_HOSTS", "VIBRAVID_USERNAME", "VIBRAVID_PASSWORD"):
+        monkeypatch.delenv(name, raising=False)
+
+    assert Client().get("/settings/", HTTP_HOST=host).status_code == 200
+
+
+def test_without_login_a_public_domain_is_refused_against_dns_rebinding(monkeypatch):
+    for name in ("ALLOWED_HOSTS", "VIBRAVID_USERNAME", "VIBRAVID_PASSWORD"):
+        monkeypatch.delenv(name, raising=False)
+
+    assert Client().get("/settings/", HTTP_HOST="attacker.example.com").status_code == 400
+    assert Client().post("/api/save-settings/", data="{}", content_type="application/json",
+                         HTTP_HOST="rebind.attacker.example.com").status_code == 400
+
+
+def test_a_public_domain_is_served_when_listed_or_when_login_is_on(monkeypatch, auth_on):
+    monkeypatch.delenv("ALLOWED_HOSTS", raising=False)
+    assert Client().get("/login/", HTTP_HOST="vibravid.example.com").status_code == 200
+
+    monkeypatch.delenv("VIBRAVID_USERNAME")
+    monkeypatch.setenv("ALLOWED_HOSTS", "vibravid.example.com")
+    assert security.foreign_host_blocked("vibravid.example.com") is False
