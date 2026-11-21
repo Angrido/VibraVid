@@ -69,3 +69,9 @@ GUI/.django_secret_key
 
 # MkDocs build output
 /site/
+.mcp.json
+.agentsroom/handoff-transcript-*.txt
+.agentsroom/handoff-summary-*.md
+.agentsroom/fork-context-*.txt
+.agentsroom/transfer-context-*.txt
+.agentsroom/handoff-context-*.txt
