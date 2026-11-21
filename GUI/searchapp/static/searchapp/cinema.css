@@ -1012,6 +1012,8 @@ pre.cn-area { min-height: 240px; max-height: 60vh; margin: 0; overflow: auto; wh
 
 .cn-log-view { margin-top: 16px; }
 .cn-log-view h3 { overflow-wrap: anywhere; }
+.cn-log-view-hd { margin-bottom: 14px; }
+.cn-log-view-hd h3 { margin-bottom: 0; }
 
 body.cn.cn-login-page { padding: 0; display: grid; place-items: center; min-height: 100dvh; }
 .cn-login { width: 100%; max-width: 400px; padding: 48px 16px; display: grid; gap: 24px; }

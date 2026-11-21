@@ -31,7 +31,11 @@
 	<p class="cn-note" id="cn-logs-feedback" role="status"></p>
 
 	<section class="cn-box cn-log-view" aria-labelledby="cn-logs-current">
-		<h3 id="cn-logs-current" tabindex="-1">Select a log file</h3>
+		<div class="cn-row cn-log-view-hd">
+			<h3 id="cn-logs-current" class="cn-grow" tabindex="-1">Select a log file</h3>
+			<span class="cn-note" id="cn-logs-copy-status" role="status"></span>
+			<button type="button" class="cn-cta is-ghost is-sm" id="cn-logs-copy" disabled>Copy</button>
+		</div>
 		<pre class="cn-area" id="cn-logs-content" tabindex="0" aria-labelledby="cn-logs-current"></pre>
 	</section>
 </div>
@@ -50,6 +54,42 @@
 
 	var logsCurrentTitle = el("cn-logs-current");
 	var logsContent = el("cn-logs-content");
+	var copyButton = el("cn-logs-copy");
+	var copyStatus = el("cn-logs-copy-status");
+	var copyStatusTimer = 0;
+	var rawLog = "";
+
+	function showLog(text, copyable) {
+		logsContent.textContent = text;
+		rawLog = copyable ? text : "";
+		copyButton.disabled = !rawLog;
+	}
+
+	function copyWithSelection() {
+		var range = document.createRange();
+		range.selectNodeContents(logsContent);
+		var selection = window.getSelection();
+		selection.removeAllRanges();
+		selection.addRange(range);
+		try { return document.execCommand("copy"); } catch (_) { return false; }
+	}
+
+	function announceCopy(copied) {
+		clearTimeout(copyStatusTimer);
+		copyStatus.className = "cn-note " + (copied ? "is-good" : "is-bad");
+		copyStatus.textContent = copied ? "Log copied to clipboard." : "Copy failed. The text is selected: press Ctrl+C.";
+		copyStatusTimer = setTimeout(function () { copyStatus.textContent = ""; }, 3000);
+	}
+
+	copyButton.addEventListener("click", async function () {
+		if (!rawLog) return;
+		var copied = false;
+		if (navigator.clipboard && window.isSecureContext) {
+			try { await navigator.clipboard.writeText(rawLog); copied = true; } catch (_) { copied = false; }
+		}
+		if (!copied) copied = copyWithSelection();
+		announceCopy(copied);
+	});
     var selectedCategory = null;
     var contentGeneration = 0;
     document.querySelectorAll("[data-clear-logs]").forEach(function (button) {
@@ -63,7 +103,7 @@
                 var result = await response.json();
                 if (selectedCategory === category) {
                     contentGeneration++;
-                    logsContent.textContent = "";
+                    showLog("", false);
                     logsCurrentTitle.textContent = "Select a log file";
                 }
                 el("cn-logs-feedback").textContent = response.ok ? "Logs cleared. Active logs may receive new entries." :
@@ -144,22 +184,24 @@
 			logsCurrentTitle.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
 		}
 		logsCurrentTitle.textContent = "Loading " + name + "…";
+		rawLog = "";
+		copyButton.disabled = true;
 		fetch(URL_LOGS_CONTENT + "?category=" + encodeURIComponent(category) + "&name=" + encodeURIComponent(name))
 			.then(function (r) { return r.json(); })
 			.then(function (data) {
 				if (generation !== contentGeneration) return;
 				logsCurrentTitle.textContent = name;
 				if (data.error) {
-					logsContent.textContent = "Error: " + data.error;
+					showLog("Error: " + data.error, false);
 					return;
 				}
-				logsContent.textContent = (data.lines || []).join("\n");
+				showLog((data.lines || []).join("\n"), true);
 				logsContent.scrollTop = logsContent.scrollHeight;
 			})
 			.catch(function (err) {
 				if (generation !== contentGeneration) return;
 				logsCurrentTitle.textContent = name;
-				logsContent.textContent = "Network error: " + err.message;
+				showLog("Network error: " + err.message, false);
 			});
 	}
 
