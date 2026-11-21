@@ -10,6 +10,7 @@ import os
 import pathlib
 import re
 import shutil
+import threading
 import time
 from typing import Any
 
@@ -23,6 +24,10 @@ from .item_log import item_log
 logger = logging.getLogger("ARR")
 _ARR_SEARCH_TIMEOUT = 45
 _IDENTITY_LOOKUP_WORKERS = 8
+# Staging folder -> download job that outlived download_timeout and is still stopping: a retry
+# must neither start a second worker in that folder nor delete the files the first one writes.
+_busy_staging: dict[str, concurrent.futures.Future] = {}
+_busy_staging_lock = threading.Lock()
 
 
 class ArrDownloaderService:
@@ -31,6 +36,7 @@ class ArrDownloaderService:
         "italian": "it", "english": "en", "french": "fr", "german": "de", "spanish": "es", "portuguese": "pt", "japanese": "ja", "korean": "ko", "chinese": "zh", "russian": "ru",
     }
     _GENERIC_EPISODE_NAME = re.compile(r"^(episodio|episode|ep|puntata)?\s*\d*$")
+    _STOP_GRACE_SECONDS = 30  # after a timeout, how long the stopped worker gets to exit
 
 
     def __init__(self, sonarr: SonarrClient, radarr: RadarrClient):
@@ -137,6 +143,7 @@ class ArrDownloaderService:
 
                 if self.sonarr.is_episode_in_queue(ep_id):
                     logger.info(f"S{season_num}E{ep_num} of '{title}' already in Sonarr queue, skipping")
+                    self.last_error = "in_arr_queue"  # not an attempt: polling must not give up on it
                     continue
 
                 if not self._is_sonarr_episode_still_monitored(series_id, ep_id):
@@ -215,6 +222,10 @@ class ArrDownloaderService:
 
                 staging = self._staging_folder(download_folder, f"S{season_num}E{ep_num}")
                 logger.info(f"[S{season_num}E{ep_num}] Staging folder: '{staging}'")
+                if self._staging_in_use(staging):
+                    logger.warning(f"[S{season_num}E{ep_num}] The timed-out download of this episode is still stopping, retrying later")
+                    self.last_error = "interrupted"
+                    continue
                 download_started = time.time()
                 future = _run_download_in_thread(
                     site=provider,
@@ -229,7 +240,7 @@ class ArrDownloaderService:
                 published = False
 
                 try:
-                    download_ok = future.result(timeout=self.download_timeout)  # wait for download to actually finish
+                    download_ok = self._wait_download(future)  # wait for download to actually finish
                     time.sleep(2)
 
                     # The provider matched the series but has no such episode (different
@@ -277,7 +288,7 @@ class ArrDownloaderService:
                         any_success = False
                         continue
 
-                    self._publish_staged_files(staging, pathlib.Path(download_folder))
+                    published_files = self._publish_staged_files(staging, pathlib.Path(download_folder))
                     published = True
 
                     # A plain rescan is enough whenever the file name parses (i.e. carries SxxExx).
@@ -308,7 +319,7 @@ class ArrDownloaderService:
                             scan_folders.append(self._translate_path(fallback_folder))
                         logger.warning(f"S{season_num}E{ep_num} not imported by rescan, falling back to manual import from {scan_folders}")
                         imported = self._confirm_episode_import(
-                            serie["id"], ep_id, scan_folders=scan_folders, force_episode=mapped
+                            serie["id"], ep_id, scan_folders, published_files, force_episode=mapped
                         )
 
                     if not imported:
@@ -325,13 +336,17 @@ class ArrDownloaderService:
                     self._warn_if_sonarr_rename_disabled()
 
                     logger.info(f"S{season_num}E{ep_num} of '{title}' completed and imported")
+                except concurrent.futures.TimeoutError:
+                    logger.error(f"S{season_num}E{ep_num} of '{title}' exceeded the {self.download_timeout}s download timeout and was stopped")
+                    self.last_error = "interrupted"
+                    any_success = False
                 except Exception as exc:
                     logger.error(f"S{season_num}E{ep_num} of '{title}' failed: {exc}")
                     self.last_error = str(exc)
                     # Don't unmonitor on failure -> stays in Sonarr's wanted list for retry
                     any_success = False
                 finally:
-                    self._clear_staging(staging, keep_resumable=not published)
+                    self._release_staging(staging, future, published)
 
         return any_success
 
@@ -358,6 +373,7 @@ class ArrDownloaderService:
 
         if self.radarr.is_movie_in_queue(movie_id):
             logger.info(f"'{title}' already in Radarr queue, skipping")
+            self.last_error = "in_arr_queue"  # not an attempt: polling must not give up on it
             return False
 
         if not self._is_radarr_movie_still_monitored(movie_id):
@@ -399,6 +415,10 @@ class ArrDownloaderService:
 
         staging = self._staging_folder(download_folder)
         logger.info(f"[_process_movie] Staging folder: '{staging}'")
+        if self._staging_in_use(staging):
+            logger.warning(f"The timed-out download of '{title}' is still stopping, retrying later")
+            self.last_error = "interrupted"
+            return False
         movie_download_started = time.time()
         future = _run_download_in_thread(
             site=provider,
@@ -412,7 +432,7 @@ class ArrDownloaderService:
         published = False
 
         try:
-            download_ok = future.result(timeout=self.download_timeout)  # wait for download to actually finish
+            download_ok = self._wait_download(future)  # wait for download to actually finish
             time.sleep(2)
 
             result_name = item_payload.get("name", matched_title)
@@ -435,7 +455,7 @@ class ArrDownloaderService:
                 self.last_error = "movie_removed"
                 return False
 
-            self._publish_staged_files(staging, pathlib.Path(download_folder))
+            published_files = self._publish_staged_files(staging, pathlib.Path(download_folder))
             published = True
 
             # A plain rescan is enough whenever the file name parses (i.e. carries a year).
@@ -457,7 +477,7 @@ class ArrDownloaderService:
                 if fallback_folder and fallback_folder != target_folder:
                     scan_folders.append(self._translate_path(fallback_folder))
                 logger.warning(f"Movie '{title}' not imported by rescan, falling back to manual import from {scan_folders}")
-                imported = self._confirm_movie_import(movie_id, scan_folders=scan_folders)
+                imported = self._confirm_movie_import(movie_id, scan_folders, published_files)
 
             if not imported:
                 logger.error(f"Movie '{title}' import not confirmed in Radarr")
@@ -473,13 +493,17 @@ class ArrDownloaderService:
 
             logger.info(f"'{title}' completed and imported")
             return True
+        except concurrent.futures.TimeoutError:
+            logger.error(f"'{title}' exceeded the {self.download_timeout}s download timeout and was stopped")
+            self.last_error = "interrupted"
+            return False
         except Exception as exc:
             logger.error(f"'{title}' failed: {exc}")
             self.last_error = str(exc)
             # Don't unmonitor on failure -> stays in Radarr's wanted list for retry
             return False
         finally:
-            self._clear_staging(staging, keep_resumable=not published)
+            self._release_staging(staging, future, published)
 
     # ── helpers ──────────────────────────────────────────
     def _is_radarr_movie_still_monitored(self, movie_id: int | None) -> bool:
@@ -832,6 +856,44 @@ class ArrDownloaderService:
             logger.info(f"Moved '{relative}' from staging to '{destination}'")
             published.append(target)
         return published
+
+    def _wait_download(self, job) -> Any:
+        """Wait for a download job; the timeout runs from when it holds a download slot, not while queued."""
+        started = getattr(job, "started", None)
+        while started is not None and not job.done() and not started.wait(1):
+            pass
+        try:
+            return job.result(timeout=self.download_timeout)
+        except concurrent.futures.TimeoutError:
+            # A timed-out future keeps running: stop the job itself, as the dashboard's Stop does.
+            download_id = getattr(job, "download_id", None)
+            if download_id:
+                from searchapp._download_infra import _cancel_scheduled_download
+
+                from VibraVid.core.ui.tracker import download_tracker
+
+                _cancel_scheduled_download(download_id)
+                download_tracker.request_stop(download_id)
+            concurrent.futures.wait([job], timeout=self._STOP_GRACE_SECONDS)
+            raise
+
+    def _release_staging(self, staging: pathlib.Path, job, published: bool) -> None:
+        """Clear the staging folder, unless its worker is still running and writing to it."""
+        if job.done():
+            self._clear_staging(staging, keep_resumable=not published)
+            return
+        logger.warning(f"Download worker for '{staging}' has not exited yet: staging left untouched")
+        with _busy_staging_lock:
+            _busy_staging[str(staging)] = job
+
+    @staticmethod
+    def _staging_in_use(staging: pathlib.Path) -> bool:
+        with _busy_staging_lock:
+            job = _busy_staging.get(str(staging))
+            if job is not None and job.done():
+                del _busy_staging[str(staging)]
+                job = None
+        return job is not None
 
     @staticmethod
     def _clear_staging(staging: pathlib.Path, keep_resumable: bool) -> None:
@@ -1904,19 +1966,27 @@ class ArrDownloaderService:
             logger.debug(f"Could not compute VibraVid movie output path: {exc}")
         return ""
 
+    @staticmethod
+    def _is_published(item: dict, published_names: set[str]) -> bool:
+        """True for a manual-import lookup entry that is one of the files just moved into the library.
+
+        The lookup runs with ``filterExistingFiles`` off, so it also lists the library's own files; with
+        Move as import mode, submitting those would rebind them to the title just downloaded.
+        """
+        path = str(item.get("path", "")).strip()
+        # PureWindowsPath splits on both separators: the ARR host may be POSIX while VibraVid runs on Windows.
+        return bool(path) and pathlib.PureWindowsPath(path).name in published_names
+
     def _confirm_episode_import(
         self,
         series_id: int,
         episode_id: int,
-        scan_folders: list | None = None,
-        season_folder: str | None = None,
+        scan_folders: list,
+        published_files: list[pathlib.Path],
         force_episode: bool = False,
     ) -> bool:
-        """Try to import episode files from each candidate folder into Sonarr."""
-        # Back-compat: accept the old season_folder kwarg
-        if scan_folders is None:
-            scan_folders = [season_folder] if season_folder else []
-
+        """Import the files just published into Sonarr, from the first candidate folder that lists them."""
+        published_names = {path.name for path in published_files}
         for folder in scan_folders:
             if not folder:
                 continue
@@ -1924,8 +1994,7 @@ class ArrDownloaderService:
                 lookup_items = self.sonarr.manual_import_lookup(folder, series_id=series_id)
                 import_payload = []
                 for item in lookup_items:
-                    path = str(item.get("path", "")).strip()
-                    if not path:
+                    if not self._is_published(item, published_names):
                         continue
 
                     # Sonarr cannot infer the episode from a name without SxxExx: bind it
@@ -1951,14 +2020,9 @@ class ArrDownloaderService:
 
         return self._wait_episode_has_file(episode_id, attempts=24)
 
-    def _confirm_movie_import(
-        self, movie_id: int, scan_folders: list | None = None, movie_root: str | None = None
-    ) -> bool:
-        """Try to import movie files from each candidate folder into Radarr."""
-        # Back-compat: accept the old movie_root kwarg
-        if scan_folders is None:
-            scan_folders = [movie_root] if movie_root else []
-
+    def _confirm_movie_import(self, movie_id: int, scan_folders: list, published_files: list[pathlib.Path]) -> bool:
+        """Import the files just published into Radarr, from the first candidate folder that lists them."""
+        published_names = {path.name for path in published_files}
         for folder in scan_folders:
             if not folder:
                 continue
@@ -1966,8 +2030,7 @@ class ArrDownloaderService:
                 lookup_items = self.radarr.manual_import_lookup(folder, movie_id=movie_id)
                 import_payload = []
                 for item in lookup_items:
-                    path = str(item.get("path", "")).strip()
-                    if not path:
+                    if not self._is_published(item, published_names):
                         continue
 
                     post_item = dict(item)

@@ -9,7 +9,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="cn-pad am-page lib-page" style="padding-top:34px">
+<div class="cn-pad is-tight am-page lib-page">
 
 	<div class="cn-page-hd">
 		<h1 class="cn-blast">Library</h1>
@@ -30,7 +30,7 @@
 			<div class="cn-big"><span class="cn-v{% if missing_movies %} is-hot{% endif %}">{{ missing_movies }}</span><span class="cn-k">Missing movies</span></div>
 			<span class="am-slab-actions">
 				<a class="cn-cta is-ghost" href="{% url 'arr_stack' %}">ARR Queue</a>
-				<a class="cn-cta" href="{% url 'arr_missing' %}">Missing from library</a>
+				<a class="cn-cta is-ghost" href="{% url 'arr_missing' %}">Missing from library</a>
 			</span>
 		</div>
 

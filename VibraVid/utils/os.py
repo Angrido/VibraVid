@@ -1,5 +1,6 @@
 # 24.01.24
 
+import hashlib
 import logging
 import os
 import re
@@ -14,7 +15,7 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from pathvalidate import sanitize_filename, sanitize_filepath
+from pathvalidate import sanitize_filename
 from rich.console import Console
 from rich.prompt import Prompt
 from unidecode import unidecode
@@ -36,8 +37,8 @@ class OsManager:
         self._pending_deletes: list[subprocess.Popen] = []
 
     def _get_max_length(self) -> int:
-        """Get max filename length based on OS."""
-        return 255 if self.system == "windows" else 4096
+        """Max length of one path component: 255 on Windows, Linux and macOS alike (4096 is the whole-path limit)."""
+        return 255
 
     def get_sanitize_file(self, filename: str, year: str = None) -> str:
         """Sanitize filename. Optionally append a year in format ' (YYYY)' if year is provided and valid."""
@@ -51,9 +52,16 @@ class OsManager:
             if y.isdigit() and len(y) == 4:
                 year_str = f" ({y})"
 
-        # Decode and sanitize base filename
-        decoded = unidecode(filename)
-        sanitized = sanitize_filename(decoded)
+        raw_name, raw_ext = os.path.splitext(filename)
+        if not sanitize_filename(unidecode(raw_name)):
+            # Emoji-only titles sanitise to '': a stable per-title placeholder keeps two of them in separate folders
+            digest = hashlib.sha1(raw_name.encode("utf-8", "replace")).hexdigest()[:8]
+            filename = f"untitled-{digest}{raw_ext}"
+
+        # Decode and sanitize base filename. The name is cut before sanitize_filename: its own 255-character cut
+        # dropped the extension of a long title.
+        name, ext = os.path.splitext(unidecode(filename))
+        sanitized = sanitize_filename(name[: max(self.max_length - len(ext), 0)] + ext)
 
         # Split name and extension
         name, ext = os.path.splitext(sanitized)
@@ -72,45 +80,76 @@ class OsManager:
         return name_with_year + ext
 
     def get_sanitize_path(self, path: str) -> str:
-        """Sanitize a complete path while preserving the native OS path separator."""
+        """Sanitize the title-derived components of a complete path while preserving the native OS path separator.
+
+        The prefix the user chose (see ``_verbatim_prefix``) is kept as is: sanitising the whole path turned a configured
+        ``D:\\Vidéos`` into ``D:\\Videos`` and ``/mnt/nas:1`` into ``/mnt/nas1``, a folder the user never configured.
+        """
         if not path:
             return path
 
-        # Decode unicode characters first (unidecode is safe on separators and drive letters — it only touches non-ASCII glyphs).
-        decoded = unidecode(path)
+        sep = "\\" if self.system == "windows" else "/"
+        normalised = str(path).replace("/" if sep == "\\" else "\\", sep)
+        prefix = self._verbatim_prefix(normalised, sep)
+        sanitized_parts = [self.get_sanitize_file(p) for p in normalised[len(prefix):].split(sep) if p]
 
-        if self.system == "windows":
-            normalised = decoded.replace("/", "\\")
+        if not prefix:
+            return sep.join(sanitized_parts)
+        if not sanitized_parts:
+            return prefix
+        return prefix.rstrip(sep) + sep + sep.join(sanitized_parts)
 
-            # Handle network paths (UNC or IP-based)  \\server\share\...
-            if normalised.startswith("\\\\"):
-                parts = normalised.split("\\")
-                sanitized_parts = parts[:4]
-                if len(parts) > 4:
-                    sanitized_parts.extend([self.get_sanitize_file(part) for part in parts[4:] if part])
-                return "\\".join(sanitized_parts)
+    def _configured_roots(self) -> list[str]:
+        """Output folders the user chose: ``OUTPUT.root_path`` and the output path forced for this download (GUI)."""
+        roots = []
+        try:
+            from .config import config_manager
 
-            # Handle drive letters  C:\...
-            if len(normalised) >= 2 and normalised[1] == ":":
-                drive = normalised[:2]  # e.g. "C:"
-                rest = normalised[2:].lstrip("\\")
-                parts = [p for p in rest.split("\\") if p]
-                sanitized_parts = [drive] + [self.get_sanitize_file(p) for p in parts]
-                return "\\".join(sanitized_parts)
+            roots.append(config_manager.config.get("OUTPUT", "root_path", default=""))
+        except Exception:
+            pass
+        try:
+            from VibraVid.core.ui.tracker import context_tracker
 
-            # Regular relative path
-            parts = [p for p in normalised.split("\\") if p]
-            return "\\".join(self.get_sanitize_file(p) for p in parts)
+            roots.append(context_tracker.output_path)
+        except Exception:
+            pass
+        return [str(root) for root in roots if root]
 
+    def _verbatim_prefix(self, normalised: str, sep: str) -> str:
+        """Leading part of *normalised* that is not title-derived: the drive / UNC share / POSIX root, a configured
+        output root, leading ``.``/``..`` of a relative path, and the directories of an absolute path that already
+        exist (a title folder we create never exists before we sanitise its name)."""
+        windows = sep == "\\"
+        if windows and normalised.startswith("\\\\"):
+            prefix = "\\".join(normalised.split("\\")[:4])
+        elif windows and len(normalised) >= 2 and normalised[1] == ":":
+            prefix = normalised[:2]
         else:
-            sanitized = sanitize_filepath(decoded)
-            is_absolute = sanitized.startswith("/")
-            parts = sanitized.replace("\\", "/").split("/")
-            sanitized_parts = [self.get_sanitize_file(part) for part in parts if part]
-            result = "/".join(sanitized_parts)
-            if is_absolute:
-                result = "/" + result
-            return result
+            prefix = "/" if not windows and normalised.startswith("/") else ""
+
+        def _fold(value: str) -> str:
+            return value.casefold() if windows else value
+
+        for root in self._configured_roots():
+            root = root.replace("/" if windows else "\\", sep).rstrip(sep)
+            if len(root) > len(prefix) and (
+                _fold(normalised) == _fold(root) or _fold(normalised).startswith(_fold(root) + sep)
+            ):
+                prefix = normalised[: len(root)]
+
+        is_absolute = normalised.startswith(sep) or (windows and normalised[1:3] == ":\\")
+        for part in normalised[len(prefix):].split(sep):
+            if not part:
+                continue
+            candidate = (prefix.rstrip(sep) + sep + part) if prefix else part
+            if part in (".", "..") and not prefix.strip("." + sep):
+                prefix = candidate
+            elif part not in (".", "..") and is_absolute and os.path.isdir(candidate):
+                prefix = candidate
+            else:
+                break
+        return prefix
 
     def get_glob_path(self, path: str) -> str:
         """Escape path for glob to prevent issues with special characters like brackets."""
@@ -273,9 +312,11 @@ class OsManager:
         """Delete *path* in a process detached from this one, so it survives this process exiting."""
         try:
             if self.system == "windows":
-                # cwd is pinned: cmd.exe cannot start in a UNC directory and would fall back to C:\Windows
-                kwargs = {"cwd": os.environ.get("SystemRoot") or None, "close_fds": True}
-                cmd = ["cmd", "/c", "rd", "/s", "/q", path]
+                # cwd is pinned: cmd.exe cannot start in a UNC directory and would fall back to C:\Windows.
+                # The path travels in an environment variable that cmd expands once, inside the quotes: a list is
+                # quoted for spaces only, so `&` in a title-derived name ran a second command and `rd` hit a sibling.
+                kwargs = {"cwd": os.environ.get("SystemRoot") or None, "close_fds": True, "env": {**os.environ, "VIBRAVID_TRASH": path}}
+                cmd = 'cmd /d /c rd /s /q "%VIBRAVID_TRASH%"'
                 flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
 
                 if self._in_kill_on_close_job():

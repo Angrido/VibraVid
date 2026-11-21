@@ -36,7 +36,7 @@
 			</a>
 			<form action="{% url 'run_watchlist_auto_now' %}" method="post">
 				{% csrf_token %}
-				<button class="cn-cta" id="cn-watch-check" type="submit" {% if scanning %}disabled aria-busy="true"{% endif %}>{% if scanning %}Checking…{% else %}Check now{% endif %}</button>
+				<button class="cn-cta{% if not items %} is-ghost{% endif %}" id="cn-watch-check" type="submit" {% if scanning %}disabled aria-busy="true"{% endif %}>{% if scanning %}Checking…{% else %}Check now{% endif %}</button>
 			</form>
 		</div>
 	</div>
@@ -69,6 +69,10 @@
 					<span class="cn-watch-side">
 						{% if item.is_new %}
 							<span class="cn-st is-run">New</span>
+							<form action="{% url 'mark_watchlist_seen' item.id %}" method="post">
+								{% csrf_token %}
+								<button class="cn-mini" type="submit">Mark as seen</button>
+							</form>
 						{% elif item.auto %}
 							<span class="cn-st is-done">Automatic</span>
 						{% else %}
@@ -129,11 +133,12 @@
             form.querySelector(".cn-quality-result").textContent = "Settings changed. Click Save to apply, then Check now.";
         });
     });
+    // Poll only while a check runs (the page reloads when one is started) and the tab is visible.
+    let scanning = button.hasAttribute("aria-busy");
     async function refreshScan() {
         try {
-            const response = await fetch("{% url 'watchlist_status' %}", {signal: AbortSignal.timeout(10000)});
-            if (!response.ok) return;
-            const state = await response.json();
+            const state = await CN.fetchJSON("{% url 'watchlist_status' %}", {signal: AbortSignal.timeout(10000)});
+            scanning = !!state.scanning;
             button.disabled = state.scanning;
             button.toggleAttribute("aria-busy", state.scanning);
             button.textContent = state.scanning ? "Checking…" : "Check now";
@@ -147,11 +152,10 @@
         } catch (_) {
             button.disabled = false;
             button.textContent = "Check now";
-        } finally {
-            window.setTimeout(refreshScan, 3000);
         }
     }
-    refreshScan();
+    const scanPoll = CN.poll(refreshScan, () => (scanning ? 3000 : 0));
+    if (scanning) scanPoll.later(3000);
     document.querySelectorAll("[data-confirm-remove]").forEach(form => {
         form.addEventListener("submit", event => {
             const name = form.closest(".cn-watch").querySelector(".cn-t").textContent.trim();

@@ -165,7 +165,7 @@ song_format = "%(album)/%(track_number:02d). %(title)"
 tag_format = "[VibraVid]"
 ```
 
-- **`root_path`**: base directory. Windows: `C:\\MyLibrary\\Folder` or `\\\\MyServer\\Share`; Linux/macOS: `Desktop/MyLibrary/Folder`. Docker/NAS: set `VIBRAVID_OUTPUT_ROOT` (e.g. `/app/Video`) instead; it overrides this field at startup without touching `config.toml`.
+- **`root_path`**: base directory. Windows: `C:\\MyLibrary\\Folder` or `\\\\MyServer\\Share`; Linux/macOS: `Desktop/MyLibrary/Folder`. Docker/NAS: set `VIBRAVID_OUTPUT_ROOT` (e.g. `/app/Video`) instead; it overrides this field at startup without touching `config.toml`. The root (and any folder of an absolute path that already exists) is used exactly as written, accents and `:` included; only the folders and files named after a title are transliterated to ASCII and stripped of characters the filesystem rejects. A name longer than 255 characters is shortened with `...` before its extension, and a title made only of emoji or symbols becomes `untitled-<8 hex>` (stable per title).
 - **`movie_folder_name`**, **`serie_folder_name`**, **`anime_folder_name`**, **`music_folder_name`**, **`live_folder_name`**: subfolder per content type (defaults `"Movie"`, `"Serie"`, `"Anime"`, `"Music"`, `"Live"`); all accept `%{site_name}`, e.g. `"Movie/%{site_name}"` -> `Movie/Crunchyroll`.
 
 ### Format tokens
@@ -245,7 +245,7 @@ temp_root = ""
 | `max_speed_mbps` | `0` | Rate cap in MB/s per stream (video/audio separately); `0` = unlimited. CLI: `--max-speed` |
 | `subtitle_resolve_workers` | `4` | HLS subtitle renditions resolved concurrently; `1` = sequential |
 | `extract_embedded_cc` | `false` | HLS only: extract embedded CEA-608/708 captions (`EXT-X-MEDIA:TYPE=CLOSED-CAPTIONS`) into a subtitle track. Opt-in: needs decoding the whole video (extra time/CPU) |
-| `cleanup_tmp_folder` | `true` | Remove temporary files afterwards |
+| `cleanup_tmp_folder` | `true` | Remove temporary files once the final file is verified. A download with segments that still failed after the retries is not muxed: it fails (CLI and GUI) saying how many segments are missing, and its temporary files are kept |
 | `keep_tmp_on_error` | `false` | Keep the temporary files (.dec, partial chunks, ...) when a download fails, for debugging |
 | `temp_root` | `""` | Folder for the temporary files (segments, merge and decrypt leftovers). Empty = next to the output file. With the output on a NAS share, point it to a fast local disk: every step otherwise reads and writes the whole title over the network (about 8x the file size). Needs about 2x the size of one title. The `VIBRAVID_TEMP_DIR` environment variable overrides it (the Docker image sets it to `/app/tmp`). Sonarr/Radarr downloads are staged under `<temp_root>/arr_staging` (VibraVid's `.cache` folder when empty) |
 | `embed_poster` | `false` | Embed a poster/still: matching TMDB artwork, else the site's own |
@@ -347,7 +347,7 @@ extension = "mkv"
 | `"copy"` | Mux the original file as-is (no conversion, no VTT sanitization) |
 | `"srt"` / `"vtt"` / `"ass"` | Force-convert all subtitles with FFmpeg (sanitization applied for `vtt`) |
 
-Conversion logic: `VibraVid/core/processors/helper/ex_sub.py`.
+Conversion logic: `VibraVid/core/muxing/helper/sub/convert.py`. Any other value is treated as `auto`, with a warning.
 
 ## REQUESTS
 

@@ -47,10 +47,12 @@ def _make_video_id(s: Stream) -> str:
     return f"vid:{res}@{s.bitrate}"
 
 
-def _make_rendition_id(group_id: str, language: str, name: str) -> str:
+def _make_rendition_id(group_id: str, language: str, name: str, forced: bool = False, characteristics: str = "") -> str:
     """Build a stable synthetic ID for an audio/subtitle rendition.
-    Priority: STABLE-RENDITION-ID (caller) → {group_id}:{language}"""
-    parts = [p for p in (group_id, language or name) if p]
+    Priority: STABLE-RENDITION-ID (caller) → {group_id}:{language}[:{name}][:forced][:{characteristics}].
+    parse_streams drops a rendition whose id was already seen, so a forced/SDH/described twin sharing the
+    LANGUAGE of the full track needs its NAME, FORCED and CHARACTERISTICS in the id to survive."""
+    parts = [p for p in (group_id, language or name, name if language else "", "forced" if forced else "", characteristics) if p]
     return ":".join(parts) if parts else "unknown"
 
 
@@ -521,7 +523,13 @@ class HLSParser:
         if name:
             s.name = name
 
-        s.id = stable_id if stable_id else _make_rendition_id(group_id, lang, name)
+        s.id = stable_id or _make_rendition_id(
+            group_id,
+            lang,
+            name,
+            forced=self._attr(line, "FORCED", "NO").upper() == "YES",
+            characteristics=self._attr(line, "CHARACTERISTICS", ""),
+        )
         s._hls_group_id = group_id  # consumed by _backfill_audio_codecs, not part of the public Stream API
 
         ch = self._attr(line, "CHANNELS", "")

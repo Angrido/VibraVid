@@ -85,7 +85,7 @@ def logs_content(request: HttpRequest) -> JsonResponse:
         content_lines = _tail_lines(d / name, lines)
     except OSError as exc:
         logger.warning("Log file '%s/%s' non leggibile: %s", category, name, exc)
-        return JsonResponse({"error": str(exc)}, status=500)
+        return JsonResponse({"error": "Could not read this log file."}, status=500)
 
     return JsonResponse({"name": name, "lines": content_lines})
 

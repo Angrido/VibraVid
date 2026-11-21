@@ -641,7 +641,6 @@ class BaseMediaDownloader:
         self._audio_labels = {}
         self._audio_labels_by_task_key = {}
         self._audio_task_keys = []
-        seen_normalized: set[str] = set()
 
         for s in sel_audio:
             label = self._audio_stream_label(s)
@@ -652,16 +651,12 @@ class BaseMediaDownloader:
             # key when the download actually runs, and the UI falls back to showing the raw
             # task_key instead of this label.
             key_lang = (s.resolved_language or s.language or "und").lower()
-            task_lang = key_lang.split("-")[0]
+            task_lang = f"{key_lang.split('-')[0]}{self._audio_suffix(s)}"
 
-            if task_lang in seen_normalized:
-                logger.info(f"Audio {raw!r} already mapped as {task_lang!r} -- skip dup")
-                continue
-            seen_normalized.add(task_lang)
-
-            self._audio_labels[raw] = label
+            # setdefault: the language fallbacks keep the first audio of a language, each audio has its own task key
+            self._audio_labels.setdefault(raw, label)
             for variant in lang_variants(normalized):
-                self._audio_labels[variant] = label
+                self._audio_labels.setdefault(variant, label)
             if s.id and ":" in s.id:
                 self._audio_labels.setdefault(s.id.split(":")[0].lower(), label)
             self._audio_labels_by_task_key[f"aud_{task_lang}"] = label
@@ -713,6 +708,26 @@ class BaseMediaDownloader:
             parts.append("[bold red][DEFAULT][/bold red]")
 
         return " ".join(parts)
+
+    def _audio_suffix(self, stream, sep: str = "_") -> str:
+        """``_2`` for the 2nd selected audio of one language (AAC + AC-3 with select_audio "all", en-US + en-GB, two
+        tags of one locale), ``_3`` for the 3rd... Task key, temp folder and output file all derive from the language:
+        without it two renditions write the same segments and file and share one track result. The first audio of a
+        language keeps today's names. Counted from the selection on every call, not stored: the generic downloader
+        asks for task keys before _prepare_labels runs, and every caller must get the same answer."""
+        def _task_lang(s) -> str:
+            return (getattr(s, "resolved_language", "") or getattr(s, "language", "") or "und").lower().split("-")[0]
+
+        task_lang = _task_lang(stream)
+        n = 0
+        for s in getattr(self, "streams", None) or []:
+            if getattr(s, "type", None) != "audio" or not getattr(s, "selected", False) or getattr(s, "is_external", False):
+                continue
+            if _task_lang(s) == task_lang:
+                n += 1
+            if s is stream:
+                return f"{sep}{n}" if n > 1 else ""
+        return ""
 
     @staticmethod
     def _sub_discriminator(stream) -> str:
@@ -910,12 +925,15 @@ class BaseMediaDownloader:
                 if status["video"] and Path(status["video"]["path"]).name == f.name:
                     continue
                 track_name = f.stem[len(self.filename) :].lstrip(".")
+                # "en.2" is the 2nd English audio (_out_filename): the mux names it by "lang", the name stays unique
+                lang_name = re.sub(r"\.\d+$", "", track_name)
                 status["audios"].append(
                     {
                         "path": str(f),
                         "name": track_name,
+                        **({"lang": lang_name} if lang_name != track_name else {}),
                         "size": f.stat().st_size,
-                        **language_variants(track_name),
+                        **language_variants(lang_name),
                     }
                 )
                 continue
@@ -958,4 +976,7 @@ class BaseMediaDownloader:
                 )
                 continue
 
+        # "movie.en.2.m4a" after "movie.en.m4a" (manifest order, as the streaming mux has it), not before it: the
+        # first audio becomes the default track
+        status["audios"].sort(key=lambda a: re.sub(r"\.(\d+)(\.\w+)$", r"\2.\1", Path(a["path"]).name))
         return status

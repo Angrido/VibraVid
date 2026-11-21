@@ -497,6 +497,39 @@ class DownloadTracker(metaclass=SingletonMeta):
                 os.remove(path)
             self.history.clear()
 
+    def clear_completed_history(self):
+        """Drop only the completed entries: failed and cancelled ones keep their Retry data."""
+        with self._lock:
+            if self._django_enabled() and not self._history_loaded:
+                self._load_persisted_history()
+            model = self._get_history_model()
+            if self._django_enabled():
+                if model is None:
+                    raise RuntimeError("Download history database is not ready")
+                # The status only lives in the JSON payload: narrow with a text match, then decode to be sure.
+                for row in model.objects.filter(payload__contains='"completed"'):
+                    try:
+                        status = json.loads(row.payload).get("status")
+                    except (ValueError, TypeError, AttributeError):
+                        continue
+                    if status == "completed":
+                        row.delete()
+            self.history = [item for item in self.history if item.get("status") != "completed"]
+            # The JSON file is the store without Django and the fallback with it: filter it the same way.
+            path = self._history_file_path()
+            try:
+                with open(path, encoding="utf-8") as fh:
+                    entries = json.load(fh)
+            except (FileNotFoundError, ValueError):
+                return  # nothing persisted, or unreadable (the loader already ignores it)
+            if not isinstance(entries, list):
+                return
+            kept = [item for item in entries if not (isinstance(item, dict) and item.get("status") == "completed")]
+            temporary_path = path + ".tmp"
+            with open(temporary_path, "w", encoding="utf-8") as fh:
+                json.dump(kept, fh, indent=2)
+            os.replace(temporary_path, path)
+
 
 class ContextTracker:
     _global_is_gui = False

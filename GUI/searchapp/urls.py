@@ -37,6 +37,7 @@ urlpatterns = [
     path("watchlist/add/", views.add_to_watchlist, name="add_to_watchlist"),
     path("watchlist/remove/<int:item_id>/", views.remove_from_watchlist, name="remove_from_watchlist"),
     path("watchlist/update/<int:item_id>/", views.update_watchlist_item, name="update_watchlist_item"),
+    path("watchlist/seen/<int:item_id>/", views.mark_watchlist_seen, name="mark_watchlist_seen"),
     path("watchlist/update-all/", views.update_all_watchlist, name="update_all_watchlist"),
     path("watchlist/auto/<int:item_id>/", views.update_watchlist_auto, name="update_watchlist_auto"),
     path("watchlist/auto-run/", views.run_watchlist_auto_now, name="run_watchlist_auto_now"),

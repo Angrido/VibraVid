@@ -48,9 +48,10 @@ def sanitize_vtt_file(subtitle_path: str) -> str:
         with open(subtitle_path, encoding="utf-8", errors="replace") as f:
             content = f.read()
 
-        # Replace unmatched '<' symbols (not followed by closing '>') with '- '
+        # Replace unmatched '<' symbols (no closing '>' on the same line) with '- ': without the line limit the
+        # lookahead reached the "-->" of the next cue's timing line, so only a stray '<' in the last cue was fixed.
         logger.info(f"Sanitizing VTT: {os.path.basename(subtitle_path)}")
-        sanitized_content = re.sub(r"<(?![^>]*>)", "- ", content)
+        sanitized_content = re.sub(r"<(?![^>\r\n]*>)", "- ", content)
 
         if sanitized_content != content:
             with open(subtitle_path, "w", encoding="utf-8") as f:

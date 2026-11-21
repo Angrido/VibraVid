@@ -31,15 +31,40 @@
         const seasonNumber = String(season || "").match(/\d+/)?.[0];
         const panel = [...document.querySelectorAll(".cn-spanel")].find(section => section.dataset.season === seasonNumber);
         const episode = data.get("selected_episodes") || data.get("episode") || panel?.querySelector(".cn-ep:not([hidden])")?.dataset.episode;
-        const response = await fetch(config.qualityUrl, {
+        return window.CN.fetchJSON(config.qualityUrl, {
             signal: AbortSignal.timeout(30000),
             method: "POST", headers: {"Content-Type": "application/json", "X-CSRFToken": data.get("csrfmiddlewaretoken")},
             body: JSON.stringify({source_alias: data.get("source_alias"), item_payload: data.get("item_payload"),
                 season, episode, audio_language: data.get("audio_language")})
         });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.message || "Unable to check provider qualities.");
-        return result;
+    }
+    // The picker's own status line is often folded away (tile "Quality and tracks"), so a check
+    // that blocks a download also explains itself right below the button that was pressed.
+    function anchorFor(form, submitter) {
+        const button = submitter || form.querySelector('[type="submit"]') ||
+            (form.id && document.querySelector('[form="' + form.id + '"]')) ||
+            (form.id === "cn-seasons-form" && document.getElementById("cn-seasons-btn"));
+        return (button || form).closest(".cn-pick, .cn-series-actions, .cn-season-hd, form, .cn-tray") || form;
+    }
+    function clearNear(form) {
+        form._qualityNote?.remove();
+        delete form._qualityNote;
+    }
+    function showNear(form, submitter, message) {
+        clearNear(form);
+        const note = document.createElement("p");
+        note.className = "cn-msg is-bad is-near";
+        note.setAttribute("role", "alert");
+        note.textContent = message;
+        const anchor = anchorFor(form, submitter);
+        if (anchor.classList.contains("cn-tray")) {
+            // The tray floats over the page: say it in the tray itself.
+            const text = anchor.querySelector(".cn-tray-txt");
+            if (text) { text.textContent = message; text.title = message; }
+            return;
+        }
+        anchor.insertAdjacentElement("afterend", note);
+        form._qualityNote = note;
     }
     function populate(picker, available) {
         const select = picker.querySelector("select"), selected = select.value;
@@ -55,6 +80,7 @@
         const status = picker.querySelector(".cn-quality-result"), button = picker.querySelector("button");
         const generation = (picker._generation || 0) + 1;
         picker._generation = generation;
+        picker._lastError = "";
         button.disabled = true; status.textContent = "Checking the provider...";
         try {
             const result = await request(form || sourceForm(picker));
@@ -71,9 +97,12 @@
                 (result.message || "Other qualities: add to Watchlist and wait for availability.");
             return result;
         } catch (error) {
-            if (picker._generation === generation) reportError(picker, error.name === "TimeoutError"
-                ? "Provider check timed out. Retry, use config, or add to Watchlist."
-                : error.message);
+            if (picker._generation === generation) {
+                picker._lastError = error.name === "TimeoutError"
+                    ? "Provider check timed out. Retry, use config, or add to Watchlist."
+                    : error.message || "Unable to check provider qualities.";
+                reportError(picker, picker._lastError);
+            }
             return null;
         } finally {
             if (picker._generation === generation) button.disabled = false;
@@ -122,36 +151,62 @@
             try { sessionStorage.setItem(key(form), quality); } catch (_) {}
             return;
         }
-        if (manual || (!quality && !audio)) return;
+        clearNear(form);
+        // "auto" is the default for every movie/series form and asks for nothing specific:
+        // only an explicit quality or audio language needs the provider check first.
+        const explicitAudio = audio && audio !== "auto" ? audio : null;
+        if (manual || (!quality && !explicitAudio)) return;
         event.preventDefault();
         form.dataset.qualityPending = "1";
         const submitter = event.submitter;
-        const previousLabel = submitter?.textContent;
         const wasDisabled = submitter?.disabled;
-        if (submitter) { submitter.disabled = true; submitter.textContent = "Checking quality..."; }
+        // Keep the label and its icon: the spinner comes from aria-busy (cinema.css).
+        if (submitter) { submitter.disabled = true; submitter.setAttribute("aria-busy", "true"); }
+        let submitted = false;
+        const fail = message => {
+            reportError(picker, message);
+            showNear(form, submitter, message);
+        };
         try {
             const result = await load(picker, form);
-            if (!result) return;
-            if (quality && !result.qualities?.includes(quality)) {
-                reportError(picker,
-                    "Selected quality is unavailable or could not be verified for this video. Add to Watchlist to wait, or use config.");
+            if (!result) {
+                if (picker._lastError) showNear(form, submitter, picker._lastError);
                 return;
             }
-            if (audio && result.audio_supported) {
+            if (quality && !result.qualities?.includes(quality)) {
+                fail("Selected quality is unavailable or could not be verified for this video. Add to Watchlist to wait, or use config.");
+                return;
+            }
+            if (explicitAudio && result.audio_supported) {
                 const available = result.audio_languages || [];
-                const match = window.CinemaAudio.availableForSelection(available, audio);
+                const match = window.CinemaAudio.availableForSelection(available, explicitAudio);
                 if (!match) {
-                    reportError(picker,
-                        "The requested audio is unavailable for this video. Choose another language or inspect tracks manually.");
+                    fail("The requested audio is unavailable for this video. Choose another language or inspect tracks manually.");
                     return;
                 }
             }
             field(form, "quality", quality);
             HTMLFormElement.prototype.submit.call(form);
+            submitted = true;
         } finally {
-            delete form.dataset.qualityPending;
-            if (submitter) { submitter.disabled = wasDisabled; submitter.textContent = previousLabel; }
+            if (submitter) submitter.removeAttribute("aria-busy");
+            // Once submit() ran the page is navigating: a second click would queue the download twice.
+            if (submitted) {
+                if (submitter) submitter.dataset.qualityLocked = "1";
+            } else {
+                delete form.dataset.qualityPending;
+                if (submitter) submitter.disabled = wasDisabled;
+            }
         }
+    });
+    // Back/forward cache restores the page as it was left: unlock what the submit locked.
+    window.addEventListener("pageshow", event => {
+        if (!event.persisted) return;
+        document.querySelectorAll("[data-quality-locked]").forEach(button => {
+            button.disabled = false;
+            delete button.dataset.qualityLocked;
+        });
+        document.querySelectorAll("form[data-quality-pending]").forEach(form => { delete form.dataset.qualityPending; });
     });
     document.addEventListener("cn:audio-change", function (event) {
         const picker = event.target.closest(".cn-tile")?.querySelector(".cn-quality-picker") || shared;

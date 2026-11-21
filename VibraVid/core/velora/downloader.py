@@ -274,6 +274,7 @@ class MediaDownloader(
 
         ext_result: dict[str, Any] = {"ext_subs": [], "ext_auds": []}
         spawned_threads: list[threading.Thread] = []
+        media_in_time = True
 
         try:
             bar_ctx = (
@@ -360,7 +361,7 @@ class MediaDownloader(
                         spawned_threads.append(t)
                         t.start()
 
-                    join_interruptible(media_threads, self._stop_event, hard_timeout=media_hard_timeout)
+                    media_in_time = self._join_media_threads(media_threads, media_hard_timeout)
                     bar_manager.finish_all_tasks()
                     join_interruptible([ext_thread], self._stop_event, hard_timeout=300.0)
 
@@ -376,7 +377,7 @@ class MediaDownloader(
                         t = threading.Thread(target=lambda s=stream: _run_stream(s), daemon=True)
                         spawned_threads.append(t)
                         t.start()
-                        join_interruptible([t], self._stop_event, hard_timeout=media_hard_timeout)
+                        media_in_time = self._join_media_threads([t], media_hard_timeout) and media_in_time
 
                     for stream in audio_streams:
                         if self._stop_check():
@@ -384,7 +385,7 @@ class MediaDownloader(
                         t = threading.Thread(target=lambda s=stream: _run_stream(s), daemon=True)
                         spawned_threads.append(t)
                         t.start()
-                        join_interruptible([t], self._stop_event, hard_timeout=media_hard_timeout)
+                        media_in_time = self._join_media_threads([t], media_hard_timeout) and media_in_time
 
                     for stream in sub_streams:
                         if self._stop_check():
@@ -392,7 +393,7 @@ class MediaDownloader(
                         t = threading.Thread(target=lambda s=stream: _run_stream(s), daemon=True)
                         spawned_threads.append(t)
                         t.start()
-                        join_interruptible([t], self._stop_event, hard_timeout=media_hard_timeout)
+                        media_in_time = self._join_media_threads([t], media_hard_timeout) and media_in_time
 
                     bar_manager.finish_all_tasks()
 
@@ -428,6 +429,10 @@ class MediaDownloader(
                 self.had_failed_segments = sum(len(failed) for _, failed in self._failed_segments)
             self._failed_segments.clear()
 
+        if not media_in_time:
+            # Whatever is on disk is a half-written track: muxing it would report a truncated file as complete
+            return {"error": f"media download still running after {media_hard_timeout:.0f}s (stopped)"}
+
         self.status = self._build_status(ext_subs, ext_auds)
 
         # A stop (Ctrl+C or a tracker-level request, e.g. a live source going
@@ -443,6 +448,21 @@ class MediaDownloader(
             return {"error": "cancelled"}
 
         return self.status
+
+    def _join_media_threads(self, threads: list[threading.Thread], hard_timeout: float, wind_down: float = 60.0) -> bool:
+        """Wait for the media tracks; False when *hard_timeout* expired first. The still-running tracks are then stopped without merging (stop + abort) and given *wind_down* seconds to exit, so nothing muxes or deletes their files while they still write."""
+        if not join_interruptible(threads, self._stop_event, hard_timeout=hard_timeout):
+            return True
+
+        alive = sum(1 for t in threads if t.is_alive())
+        logger.error(f"{alive} track(s) still downloading after {hard_timeout:.0f}s: stopping them, the download is failed")
+        console.print(f"\n[red]{alive} track(s) still downloading after {hard_timeout:.0f}s: stopped, the partial files are kept.")
+        self._stop_event.set()
+        self._abort_event.set()
+        self._cancel_all_loops()
+        if join_interruptible(threads, threading.Event(), hard_timeout=wind_down):
+            logger.warning(f"Track thread(s) still alive {wind_down:.0f}s after the stop request")
+        return False
 
     def _wait_after_interrupt(self, threads: list[threading.Thread], max_wait: float = 900.0, poll: float = 0.25, notice_every: float = 5.0) -> bool:
         """Let the stream threads finish after the first Ctrl+C (a big video needs time to finalize) and return True once they all have."""
@@ -648,4 +668,5 @@ class MediaDownloader(
                     counter += 1
 
         audio_ext = "webm" if ext == "webm" else "m4a"
-        return f"{self.filename}.{lang}.{audio_ext}"
+        # ".2": a dot never survives safe_name, so _build_status can tell the ordinal from the language
+        return f"{self.filename}.{lang}{self._audio_suffix(stream, '.')}.{audio_ext}"

@@ -194,8 +194,8 @@ def interval_hours() -> int:
 def set_interval_hours(value: int) -> None:
     from VibraVid.utils import config_manager
 
-    config_manager.config.set_key("ARR", INTERVAL_KEY, value)
-    config_manager.save_config()
+    # Only this key, merged into the file on disk; raises OSError when the file cannot be written.
+    config_manager.patch_file("config", {"ARR": {INTERVAL_KEY: value}})
     _interval_changed.set()
 
 

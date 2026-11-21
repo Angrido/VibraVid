@@ -335,12 +335,24 @@ def apply_config_updates(args):
         else:
             session_updates[config_key] = val
 
-    for key, value in {**persistent_updates, **session_updates}.items():
-        section, option = key.split(".")
-        config_manager.config.set_key(section, option, value)
-
     if persistent_updates:
-        config_manager.save_config()
+        patch = {}
+        for key, value in persistent_updates.items():
+            section, option = key.split(".")
+            patch.setdefault(section, {})[option] = value
+        try:
+            # Only these keys reach config.toml (save_config() would also write this run's session values).
+            config_manager.patch_file("config", patch)
+        except Exception as exc:
+            logger.error(f"Could not save {', '.join(persistent_updates)} to config.toml: {exc}")
+            console.print(f"[red]Could not save {', '.join(persistent_updates)} to config.toml: {exc}")
+            for key, value in persistent_updates.items():
+                config_manager.config.set_key(*key.split("."), value)
+
+    # patch_file reloads the file, so the session values go in after it.
+    for key, value in session_updates.items():
+        section, option = key.split(".")
+        config_manager.set_session_value(section, option, value)
 
 
 def _apply_interactive_site_options(selected_module_name, site_module_name):

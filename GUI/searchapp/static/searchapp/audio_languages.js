@@ -193,7 +193,8 @@
     }, true);
     if (dialog) {
         dialog.querySelector("[data-audio-cancel]").addEventListener("click", () => dialog.close());
-        dialog.addEventListener("click", event => { if (event.target === dialog) dialog.close(); });
+        // Only the backdrop closes it: a click on the sheet's padding would lose the choice.
+        window.CN.closeOnBackdrop(dialog);
         dialog.addEventListener("close", () => {
             if (dialog.open) return;
             const quality = movieForm?.closest(".cn-tile").querySelector(".cn-quality-picker");

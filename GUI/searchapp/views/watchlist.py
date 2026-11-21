@@ -109,8 +109,9 @@ def add_to_watchlist(request: HttpRequest) -> HttpResponse:
             threading.Thread(target=_bg_update, daemon=True).start()
             messages.success(request, f"'{name}' added to the watchlist.")
 
-    except Exception as e:
-        messages.error(request, f"Error adding to watchlist: {e}")
+    except Exception:
+        logger.exception("Could not add the title to the watchlist")  # the text can carry the provider's host name
+        messages.error(request, "Could not add it to the watchlist. Open the logs for details.")
 
     # Redirect back to search results if we have the params
     if search_query and search_site:
@@ -195,6 +196,14 @@ def update_watchlist_item(request: HttpRequest, item_id: int) -> HttpResponse:
 
 
 @require_http_methods(["POST"])
+def mark_watchlist_seen(request: HttpRequest, item_id: int) -> HttpResponse:
+    """Clear the "New" badge: checks only raise the flags, so they stay set until the user has seen the news."""
+    if not WatchlistItem.objects.filter(id=item_id).update(has_new_seasons=False, has_new_episodes=False):
+        messages.error(request, "Item not found.")
+    return redirect("watchlist")
+
+
+@require_http_methods(["POST"])
 def update_all_watchlist(request: HttpRequest) -> HttpResponse:
     """Update all items in the watchlist."""
     items = WatchlistItem.objects.all()
@@ -232,4 +241,4 @@ def watchlist_status(request: HttpRequest) -> JsonResponse:
         "items": list(WatchlistItem.objects.values("id", "auto_status")),
     })
 
-__all__ = ['set_watchlist_polling_interval', 'add_to_watchlist', 'remove_from_watchlist', 'clear_watchlist', 'update_watchlist_auto', 'update_watchlist_item', 'update_all_watchlist', 'run_watchlist_auto_now', 'watchlist_status']
+__all__ = ['set_watchlist_polling_interval', 'add_to_watchlist', 'remove_from_watchlist', 'clear_watchlist', 'update_watchlist_auto', 'update_watchlist_item', 'mark_watchlist_seen', 'update_all_watchlist', 'run_watchlist_auto_now', 'watchlist_status']

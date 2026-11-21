@@ -305,8 +305,11 @@ async def _do_scarica_search(event, query: str) -> None:
 
 
 
-async def _start_remote_download(event, item: dict, season: str | None, episodes: str | None, expected: int = 1) -> None:
-    """Starts the download via the GUI and registers it for monitoring (status text in chat, no file ever sent)."""
+async def _start_remote_download(event, item: dict, season: str | None, episodes: str | None, expected: int = 1) -> bool:
+    """Starts the download via the GUI and registers it for monitoring (status text in chat, no file ever sent).
+
+    Returns whether the GUI accepted it, so the caller can let the user tap the button again after a failure.
+    """
     payload = {
         "site": item.get("site"),
         "payload": item.get("payload") or {},
@@ -318,10 +321,10 @@ async def _start_remote_download(event, item: dict, season: str | None, episodes
     except (OSError, ValueError):
         state.log.exception("Failed to start download")
         await event.edit("❌ Error starting the download on VibraVid.")
-        return
+        return False
     if resp.get("error"):
         await event.edit(f"❌ VibraVid: {_esc(resp['error'])}", parse_mode="html")
-        return
+        return False
 
     title = resp.get("title") or item.get("title") or "?"
     download_id = resp.get("download_id") or f"tg_{secrets.token_hex(4)}"
@@ -337,6 +340,22 @@ async def _start_remote_download(event, item: dict, season: str | None, episodes
         "was_active": False,
     }
     state.log.info("Download requested: %s (id=%s, expected=%d)", title, download_id, max(1, expected))
+    return True
+
+
+def _claim_start(event) -> tuple[int, bytes] | None:
+    """Mark this download button as used; None if it already was (double tap).
+
+    Check and claim happen with no await in between: Telethon runs updates concurrently, so the
+    second tap can arrive while the first one is still waiting on the GUI.
+    """
+    key = (event.chat_id, bytes(event.data or b""))
+    if key in state._STARTED:
+        return None
+    state._STARTED[key] = None
+    while len(state._STARTED) > state.STARTED_MAX:
+        state._STARTED.popitem(last=False)
+    return key
 
 
 
@@ -388,6 +407,6 @@ __all__ = [
     '_save_prefs', 'get_user_site', 'set_user_site', 'get_site_options',
     '_label_for', '_site_view', 'is_allowed', 'deny', '_cb_parts',
     '_poster_url', '_edit_or_upgrade_to_photo', '_downgrade_to_text',
-    '_remote_icon', '_fmt_bytes', '_do_scarica_search', '_start_remote_download',
+    '_remote_icon', '_fmt_bytes', '_do_scarica_search', '_start_remote_download', '_claim_start',
     '_episode_view', '_send_log_text',
 ]

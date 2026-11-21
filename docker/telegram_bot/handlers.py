@@ -8,6 +8,7 @@ from telethon.errors import MessageNotModifiedError
 from docker.telegram_bot import state
 from docker.telegram_bot.common import (
     _cb_parts,
+    _claim_start,
     _do_scarica_search,
     _edit_or_upgrade_to_photo,
     _episode_view,
@@ -85,21 +86,42 @@ async def on_scarica_query_text(event) -> None:
 
 
 
-async def on_remote_pick(event) -> None:
-    await event.answer()
-    if not is_allowed(event):
+async def _guarded(event, handler) -> None:
+    """Run a button handler that may start a download at most once per button (see _claim_start).
+
+    The claim is dropped again unless a download really started, so "expired", errors and the
+    season list can be retried.
+    """
+    key = _claim_start(event)
+    if key is None:
+        await event.answer("⏳ Already requested.")
         return
+    started = False
+    try:
+        await event.answer()
+        if not is_allowed(event):
+            return
+        started = await handler(event)
+    finally:
+        if not started:
+            state._STARTED.pop(key, None)
+
+
+async def on_remote_pick(event) -> None:
+    await _guarded(event, _remote_pick)
+
+
+async def _remote_pick(event) -> bool:
     try:
         _, token, idx = _cb_parts(event)
         item = state._REMOTE[token][int(idx)]
     except (KeyError, IndexError, ValueError):
         await event.edit("Selection expired. Redo /scarica.")
-        return
+        return False
 
     t = str(item.get("type") or "").lower()
     if item.get("is_movie") or t in ("song", "track", "music", "album", "film", "movie", "book", "ebook", "audiobook"):
-        await _start_remote_download(event, item, None, None)
-        return
+        return await _start_remote_download(event, item, None, None)
 
     title = item.get("title", "?")
     await event.edit(f"📺 <b>{_esc(title)}</b> — loading seasons…", parse_mode="html")
@@ -115,7 +137,7 @@ async def on_remote_pick(event) -> None:
         seasons = []
     if not seasons:
         await event.edit("❌ Can't read the seasons. Try again or use the GUI.")
-        return
+        return False
 
     buttons = [
         [Button.inline(
@@ -127,6 +149,7 @@ async def on_remote_pick(event) -> None:
     await _edit_or_upgrade_to_photo(
         event, item, f"📺 <b>{_esc(title)}</b> — which season?", buttons=buttons,
     )
+    return False
 
 
 
@@ -164,31 +187,33 @@ async def on_episode_page(event) -> None:
 
 
 async def on_season_all(event) -> None:
-    await event.answer()
-    if not is_allowed(event):
-        return
+    await _guarded(event, _season_all)
+
+
+async def _season_all(event) -> bool:
     try:
         _, token, idx, season, count = _cb_parts(event)
         item = state._REMOTE[token][int(idx)]
     except (KeyError, IndexError, ValueError):
         await event.edit("Selection expired. Redo /scarica.")
-        return
+        return False
     expected = int(count) if str(count).isdigit() and int(count) > 0 else 1
-    await _start_remote_download(event, item, season, "*", expected=expected)
+    return await _start_remote_download(event, item, season, "*", expected=expected)
 
 
 
 async def on_episode_pick(event) -> None:
-    await event.answer()
-    if not is_allowed(event):
-        return
+    await _guarded(event, _episode_pick)
+
+
+async def _episode_pick(event) -> bool:
     try:
         _, token, idx, season, episode = _cb_parts(event)
         item = state._REMOTE[token][int(idx)]
     except (KeyError, IndexError, ValueError):
         await event.edit("Selection expired. Redo /scarica.")
-        return
-    await _start_remote_download(event, item, season, episode, expected=1)
+        return False
+    return await _start_remote_download(event, item, season, episode, expected=1)
 
 
 
@@ -339,7 +364,7 @@ async def on_cancel_download(event) -> None:
     if not did:
         await event.edit("Request expired.")
         return
-    info = state._pending.pop(did, None)
+    info = state._pending.get(did)
     try:
         # download_id is enough: the endpoint resolves the series and clears the rest of the queue too.
         resp = await gui_post("/api/bot/cancel/", {"download_id": did}, timeout=30)
@@ -350,6 +375,8 @@ async def on_cancel_download(event) -> None:
     if resp.get("error"):
         await event.edit(f"⚠️ Cancel failed: {_esc(resp['error'])}", parse_mode="html")
         return
+    # Forget it only now: after a failed call the download is still running and must stay followed.
+    state._pending.pop(did, None)
     title = _esc(info["title"]) if info else "download"
     await event.edit(f"❌ Cancelled: <b>{title}</b>.", parse_mode="html")
 
@@ -383,6 +410,9 @@ async def cmd_coda(event) -> None:
         state.log.exception("Failed to fetch queue status")
         await event.respond("❌ Can't read the status (is the 'vibravid' container up?).")
         raise events.StopPropagation from None
+    if data.get("error"):  # e.g. 401/403: missing or wrong bot secret, not an empty queue
+        await event.respond(f"❌ VibraVid: {data['error']}")
+        raise events.StopPropagation
 
     active = data.get("active") or []
     scheduled = data.get("scheduled") or []
@@ -418,6 +448,9 @@ async def cmd_stato(event) -> None:
         state.log.exception("Health status fetch failed")
         await event.respond("❌ VibraVid unreachable (is the 'vibravid' container down?).")
         raise events.StopPropagation from None
+    if data.get("error"):  # e.g. 401/403: missing or wrong bot secret, not a healthy idle GUI
+        await event.respond(f"❌ VibraVid: {data['error']}")
+        raise events.StopPropagation
 
     disk = data.get("disk") or {}
     slots = data.get("slots") or {}

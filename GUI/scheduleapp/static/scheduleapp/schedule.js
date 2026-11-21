@@ -19,12 +19,15 @@
     const pad = n => String(n).padStart(2, "0");
     const startOfDay = date => new Date(date.getFullYear(), date.getMonth(), date.getDate());
     const addDays = (date, n) => new Date(date.getFullYear(), date.getMonth(), date.getDate() + n);
-    const format = (date, options) => date.toLocaleDateString("en-GB", options);
+    // The interface language, not the browser's: English keeps the day-month order.
+    const LOCALE = window.CN_LANG && window.CN_LANG !== "en" ? window.CN_LANG : "en-GB";
+    const format = (date, options) => date.toLocaleDateString(LOCALE, options);
+    const tr = text => (window.t ? window.t(text) : text);
 
     function dayLabel(date) {
         const diff = Math.round((startOfDay(date) - startOfDay(new Date())) / 86400000);
-        if (diff === 0) return "Today";
-        if (diff === 1) return "Tomorrow";
+        if (diff === 0) return tr("Today");
+        if (diff === 1) return tr("Tomorrow");
         return format(date, {weekday: "short", day: "numeric", month: "short"});
     }
     function whenLabel(date) {
@@ -32,9 +35,11 @@
     }
     function distance(date) {
         const minutes = Math.round((date - Date.now()) / 60000);
-        if (minutes < 1) return "now";
+        if (minutes < 1) return tr("now");
         const d = Math.floor(minutes / 1440), h = Math.floor((minutes % 1440) / 60), m = minutes % 60;
-        return "in " + [d && d + " d", h && h + " h", !d && m && m + " min"].filter(Boolean).join(" ");
+        // One whole phrase per shape, so the catalog can translate it ("in {d} d {h} h" ...).
+        const key = "in " + [d && "{d} d", h && "{h} h", !d && m && "{m} min"].filter(Boolean).join(" ");
+        return tr(key).replace("{d}", d).replace("{h}", h).replace("{m}", m);
     }
 
     let toastTimer = null;
@@ -53,17 +58,16 @@
         toastTimer = setTimeout(() => node.remove(), 6000);
     }
 
-    async function post(url, data) {
-        const response = await fetch(url, {method: "POST", headers: {"X-CSRFToken": config.csrf}, body: data});
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(result.message || "Request failed.");
-        return result;
+    // CN.fetchJSON rejects a login page or a 401 instead of reading it as success.
+    function post(url, data) {
+        return window.CN.fetchJSON(url, {method: "POST", headers: {"X-CSRFToken": config.csrf}, body: data});
     }
 
     // ── Day / time picker ───────────────────────────────────────────────────
-    // Resolves with the chosen Date, or null when dismissed.
-    function pickTime(title, what, confirmLabel, initial) {
+    // Resolves with the chosen Date, or null when dismissed. Focus goes back to `opener`.
+    function pickTime(title, what, confirmLabel, initial, opener) {
         return new Promise(resolve => {
+            opener = opener || document.activeElement;
             const soon = new Date(Date.now() + 3600000);
             soon.setMinutes(Math.ceil(soon.getMinutes() / MINUTE_STEP) * MINUTE_STEP, 0, 0);
             const start = initial && initial > Date.now() ? initial : soon;
@@ -78,6 +82,7 @@
             dialog.appendChild(make("span", "cn-tag", "Schedule download"));
             const heading = make("h2", "", title);
             heading.id = "cn-sch-title";
+            heading.dataset.noTr = "";  // provider title
             dialog.appendChild(heading);
             if (what) dialog.appendChild(make("p", "cn-sch-what", what));
 
@@ -120,6 +125,7 @@
             earlier.addEventListener("click", () => { state.page--; render(); });
             later.addEventListener("click", () => { state.page++; render(); });
             const days = daySection.box.appendChild(make("div", "cn-sch-grid cn-sch-days"));
+            let dayPage = null, dayCells = [];
 
             const hours = section("Hour").box.appendChild(make("div", "cn-sch-grid cn-sch-hours"));
             const hourCells = Array.from({length: 24}, (_, hour) => cell(hours, pad(hour), () => { state.hour = hour; }));
@@ -145,17 +151,24 @@
                 earlier.disabled = state.page === 0;
                 later.disabled = state.page >= PAGES - 1;
 
-                days.replaceChildren();
-                for (let i = 0; i < DAYS_PER_PAGE; i++) {
-                    const date = addDays(first, i);
-                    const button = make("button", "cn-sch-cell");
-                    button.appendChild(make("small", "", +date === +today ? "Today" : format(date, {weekday: "short"})));
-                    button.appendChild(make("b", "", date.getDate()));
-                    button.setAttribute("aria-label", format(date, {weekday: "long", day: "numeric", month: "long"}));
-                    button.setAttribute("aria-pressed", String(+date === +state.day));
-                    button.addEventListener("click", () => { state.day = date; render(); });
-                    days.appendChild(button);
+                // Rebuild the day buttons only when the page of days changes: a day click
+                // just moves aria-pressed, so keyboard focus stays on the pressed button.
+                if (dayPage !== state.page) {
+                    dayPage = state.page;
+                    dayCells = [];
+                    days.replaceChildren();
+                    for (let i = 0; i < DAYS_PER_PAGE; i++) {
+                        const date = addDays(first, i);
+                        const button = make("button", "cn-sch-cell");
+                        button.appendChild(make("small", "", +date === +today ? tr("Today") : format(date, {weekday: "short"})));
+                        button.appendChild(make("b", "", date.getDate()));
+                        button.setAttribute("aria-label", format(date, {weekday: "long", day: "numeric", month: "long"}));
+                        button.addEventListener("click", () => { state.day = date; render(); });
+                        days.appendChild(button);
+                        dayCells.push({button, date});
+                    }
                 }
+                dayCells.forEach(({button, date}) => button.setAttribute("aria-pressed", String(+date === +state.day)));
 
                 const isToday = +state.day === +today;
                 hourCells.forEach((button, hour) => {
@@ -178,8 +191,12 @@
             let result = null;
             cancel.addEventListener("click", () => dialog.close());
             confirm.addEventListener("click", () => { result = chosen(); dialog.close(); });
-            dialog.addEventListener("click", event => { if (event.target === dialog) dialog.close(); });
-            dialog.addEventListener("close", () => { dialog.remove(); resolve(result && result > Date.now() ? result : null); });
+            window.CN.closeOnBackdrop(dialog);
+            dialog.addEventListener("close", () => {
+                dialog.remove();
+                if (opener?.isConnected) opener.focus({preventScroll: true});
+                resolve(result && result > Date.now() ? result : null);
+            });
 
             render();
             document.body.appendChild(dialog);
@@ -217,7 +234,7 @@
         return "";
     }
 
-    async function schedule(form) {
+    async function schedule(form, opener) {
         const data = collect(form);
         const kind = data.get("download_type");
         if (kind === "selected_seasons" && !data.get("selected_seasons")) return toast("Select at least one season first.", {bad: true});
@@ -225,12 +242,12 @@
         let name = "";
         try { name = JSON.parse(data.get("item_payload")).name; } catch (_) {}
 
-        const when = await pickTime(name || "Download", describe(data), "Schedule");
+        const when = await pickTime(name || "Download", describe(data), "Schedule", null, opener);
         if (!when) return;
         data.set("run_at", String(Math.floor(when.getTime() / 1000)));
         try {
             await post(config.addUrl, data);
-            toast("Scheduled for " + whenLabel(when), {link: config.queueUrl});
+            toast(tr("Scheduled for {when}").replace("{when}", whenLabel(when)), {link: config.queueUrl});
             refresh();
         } catch (error) { toast(error.message, {bad: true}); }
     }
@@ -249,7 +266,7 @@
         item.setAttribute("role", "menuitem");
         item.innerHTML = CLOCK;
         item.appendChild(make("span", "", "Schedule…"));
-        item.addEventListener("click", () => { closeMenu(); schedule(form); });
+        item.addEventListener("click", () => { closeMenu(); schedule(form, owner); });
         node.appendChild(item);
         document.body.appendChild(node);
 
@@ -304,7 +321,7 @@
         if (when) data.set("run_at", String(Math.floor(when.getTime() / 1000)));
         try {
             await post(config.updateUrl, data);
-            if (action === "move") toast("Moved to " + whenLabel(when));
+            if (action === "move") toast(tr("Moved to {when}").replace("{when}", whenLabel(when)));
         } catch (error) { toast(error.message, {bad: true}); }
         refresh();
     }
@@ -336,12 +353,19 @@
 
         const actions = row.appendChild(make("span", "cn-sch-acts"));
         const button = (label, onClick) => actions.appendChild(make("button", "cn-cta is-ghost", label)).addEventListener("click", onClick);
-        button("Change time", async () => {
-            const moved = await pickTime(job.title, job.summary, "Save", when);
+        button("Change time", async event => {
+            const moved = await pickTime(job.title, job.summary, "Save", when, event.currentTarget);
             if (moved) update(job, "move", moved);
         });
         button("Start now", () => update(job, "run"));
-        button("Remove", () => update(job, "remove"));
+        // Removing a scheduled job cannot be undone: same confirmation as the other destructive actions.
+        button("Remove", async () => {
+            const ok = await window.CN.confirm({
+                title: "Remove this scheduled download?", detail: job.title,
+                text: "It will not start at the scheduled time.", confirm: "Remove",
+            });
+            if (ok) update(job, "remove");
+        });
         return row;
     }
 
@@ -349,9 +373,7 @@
         if (!queue) return;
         let items;
         try {
-            const response = await fetch(config.listUrl);
-            if (!response.ok) return;
-            items = (await response.json()).items || [];
+            items = (await window.CN.fetchJSON(config.listUrl)).items || [];
         } catch (_) { return; }
 
         if (!strip) {

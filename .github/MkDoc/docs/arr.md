@@ -175,6 +175,8 @@ enable_radarr_webhook = true
 !!! note
     Webhooks and polling can be used together: webhooks trigger an immediate download when
     media is added, polling acts as a safety net for items that arrive without a webhook event.
+    A webhook never downloads an episode or movie that Sonarr/Radarr already has a file for
+    (for example one imported from another download client).
 
 ## Manual and automatic sync
 
@@ -228,6 +230,8 @@ Tags are created in Sonarr/Radarr under Settings -> Tags, then assigned to indiv
 | `provider-<site>` | Uses any supported VibraVid site for that title |
 | `hold` / `pausa` | Skips the item until the tag is removed |
 | `skip-s1`, `skip-s2`, ... | Skips a specific season of a series |
+
+These tags, the `tags_mode` whitelist/blacklist and the rule that specials (season 0) are skipped apply on every path: polling, Seerr approvals and the Sonarr/Radarr webhooks.
 
 **Method 2 — Global fallback list (recommended, zero per-title configuration)**
 

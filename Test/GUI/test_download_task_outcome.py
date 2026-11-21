@@ -39,6 +39,32 @@ class _FailedProvider:
         return False
 
 
+@pytest.mark.parametrize(
+    "module, cls",
+    [
+        ("streamingcommunity", "StreamingCommunityAPI"),
+        ("animeunity", "AnimeUnityAPI"),
+        ("animeworld", "AnimeWorldAPI"),
+        ("tubitv", "TubiTvAPI"),
+        ("amazon_music", "AmazonMusicAPI"),
+    ],
+)
+def test_an_explicit_service_failure_reaches_the_queue(module, cls):
+    """These adapters returned True whatever the service said, so a failed title vanished instead of showing Retry."""
+    import importlib
+
+    from searchapp.api.base import Entries
+
+    api = object.__new__(getattr(importlib.import_module(f"searchapp.api.{module}"), cls))  # no config or network
+    api.site_name, api.base_url, api.scrape_serie = module, "", None
+    api._search_fn = lambda *a, **k: False
+    item = Entries(name="Title", type="film", raw_data={"name": "Title", "type": "film"})
+
+    assert api.start_download(item) is False
+    api._search_fn = lambda *a, **k: None  # some entry points return nothing on success
+    assert api.start_download(item) is True
+
+
 def test_provider_false_result_is_terminal_failure(monkeypatch):
     provider = _FailedProvider()
 
@@ -101,3 +127,20 @@ def test_provider_false_result_is_terminal_failure(monkeypatch):
     assert failures[0]["site"] == "streamingcommunity"
     assert failures[0]["title"] == "Cime tempestose"
     assert failures[0]["error"] == "streamingcommunity reported that the download did not complete successfully"
+
+
+@pytest.mark.parametrize("submit", [True, False])
+def test_the_queued_job_exposes_the_download_id_it_registered(monkeypatch, submit):
+    """Callers (ARR timeout, bot API) need the real id to stop the job, not a guess from the queue."""
+    import concurrent.futures
+
+    registered = []
+    monkeypatch.setattr(_shared, "_add_scheduled_download", lambda download_id, *a, **k: registered.append(download_id))
+    monkeypatch.setattr(_shared, "_submit_download_task", lambda fn: concurrent.futures.Future())
+
+    job = _shared._run_download_in_thread("streamingcommunity", {"name": "Cime tempestose", "type": "film"},
+                                          _submit=submit)
+
+    assert registered == [job.download_id]
+    assert job.download_id.startswith("streamingcommunity_")
+    assert not job.started.is_set()

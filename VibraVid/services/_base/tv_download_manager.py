@@ -99,16 +99,16 @@ def process_season_selection(
             else:
                 console.print(f"[yellow]Warning: Selection {val} is neither a valid index nor a valid season number.")
     else:
-        # Pre-selected mode (from GUI/CLI) - accept a 1-based index (position in the displayed list) first, then fall back to matching an actual season number.
+        # Pre-selected mode (from GUI/CLI/TUI/bot, which all pass season numbers) - match an actual season number
+        # first, then fall back to a 1-based index (position in the displayed list) for sites whose season numbers
+        # are not 1..N (years, ...). Position first picked season 5 for `-S 4` on seasons 1,2,4,5.
         def _resolve_season_num(num: int) -> None:
-            if context_tracker.audio_filter:
-                if num in available_numbers:
-                    list_season_select.append(num)
-                return
-            if 1 <= num <= len(seasons_list):
-                list_season_select.append(seasons_list[num - 1].number)
-            elif num in available_numbers:
+            if num in available_numbers:
                 list_season_select.append(num)
+            elif context_tracker.audio_filter:
+                return
+            elif 1 <= num <= len(seasons_list):
+                list_season_select.append(seasons_list[num - 1].number)
             else:
                 console.print(f"[yellow]Warning: Season {num} is not available. Available: {available_numbers}")
 
@@ -125,8 +125,15 @@ def process_season_selection(
                 except ValueError:
                     console.print(f"[yellow]Warning: '{val}' is not a valid season range.")
                     continue
-                end = int(end_s) if end_s.isdigit() else len(seasons_list)
-                for num in range(start, end + 1):
+                int_numbers = [n for n in available_numbers if isinstance(n, int)]
+                end = int(end_s) if end_s.isdigit() else max([len(seasons_list), *int_numbers])
+                if start > end:
+                    console.print(f"[yellow]Warning: '{val}' is a reversed season range, write it as {end}-{start}.")
+                    continue
+                # A range of season numbers selects those seasons only: resolving each value on its own turned
+                # the missing 3 of `1-3` (seasons 1,2,4,5) into the 3rd position, season 4.
+                numbered = [n for n in int_numbers if start <= n <= end]
+                for num in numbered or range(start, end + 1):
                     _resolve_season_num(num)
                 continue
 
@@ -144,6 +151,13 @@ def process_season_selection(
         else:
             return
 
+    # `1,1` or overlapping ranges downloaded the same season twice
+    list_season_select = list(dict.fromkeys(list_season_select))
+
+    # An explicit episode selection applies to each explicitly selected season (`-S 1-2 -E 1`); without one,
+    # several seasons, like `*`, download every episode.
+    download_all = index_season_selected == "*" or (len(list_season_select) > 1 and episode_selection is None)
+
     # Loop through the selected seasons and download episodes
     for season_number in list_season_select:
         if _is_user_stop_requested():
@@ -155,9 +169,6 @@ def process_season_selection(
         if not season:
             console.print(f"[red]Season {season_number} not found! Available seasons: {available_numbers}")
             continue
-
-        # Determine if we should download all episodes
-        download_all = len(list_season_select) > 1 or index_season_selected == "*"
 
         # Call the download callback with appropriate parameters
         download_episode_callback(
@@ -287,7 +298,6 @@ def process_episode_download(
 
                 # 2. Check if it's a valid episode number
                 else:
-                    print("Failed index check, trying episode number check...")
                     found = False
                     for idx, ep in enumerate(episodes, 1):
                         ep_num = ep.get("number") if isinstance(ep, dict) else getattr(ep, "number", None)
@@ -300,6 +310,10 @@ def process_episode_download(
 
                     if not found:
                         console.print(f"[yellow]Warning: Episode selection {val} is neither a valid index nor a valid episode number.")
+
+            # A value can reach the same episode as an index and as a number (`*` and open ranges run up to the
+            # highest episode number): keep each episode once, in order.
+            list_episode_select = list(dict.fromkeys(list_episode_select))
 
             if list_episode_select:
                 break

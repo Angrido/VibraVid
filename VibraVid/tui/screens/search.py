@@ -641,18 +641,19 @@ class SearchScreen(Screen):
         to_retry = list(self._failed_sites)
         self.app.notify(t("retrying_sites_msg", sites=", ".join(to_retry)), severity="information")
         self._set_loading(True)
-        self._retry_worker(self._last_query, to_retry)
+        # Read the widget here: the worker runs in a thread and must not touch the DOM.
+        year_spec = _parse_year_filter(self.query_one("#year", Input).value)
+        self._retry_worker(self._last_query, to_retry, year_spec)
 
     @work(thread=True, exclusive=True, group="search")
-    def _retry_worker(self, query: str, sites: list[str]) -> None:
+    def _retry_worker(self, query: str, sites: list[str], year_spec: tuple[int, int] | None) -> None:
         try:
-            found, errors = bridge.search_multi_sites(sites, query)
+            found, errors = bridge.search_global(query, sites)
             results = [(site, it) for site, items in found.items() for it in items]
         except Exception as e:
             logger.exception("retry failed")
             self.app.call_from_thread(self._search_failed, str(e))
             return
-        year_spec = _parse_year_filter(self.query_one("#year", Input).value)
         self.app.call_from_thread(self._apply_results, results, errors, year_spec, True)
 
     # ── Live Preview Card Rendering (Mouse Hover & Selection) ───────────────

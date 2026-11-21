@@ -46,6 +46,24 @@ def format_status_badge(status: str) -> str:
         return f"[dim]⏳ {status.upper()}[/dim]"
 
 
+def cursor_row_key(table: DataTable) -> str | None:
+    """Key of the row under the cursor, so a refresh can find the same item again."""
+    keys = list(table.rows)
+    row = table.cursor_row
+    if row is None or not 0 <= row < len(keys):
+        return None
+    return keys[row].value
+
+
+def restore_cursor(table: DataTable, key: str | None, fallback_row: int | None) -> None:
+    """Put the cursor back on *key*: by index, a row added or removed above it would shift the
+    cursor onto another item and Cancel/Play/Retry would act on that one."""
+    if key is not None and key in table.rows:
+        table.move_cursor(row=table.get_row_index(key))
+    elif fallback_row is not None and fallback_row < table.row_count:
+        table.move_cursor(row=fallback_row)
+
+
 class DownloadsScreen(Screen):
     """Live download progress panel with cancel/retry controls."""
 
@@ -119,6 +137,7 @@ class DownloadsScreen(Screen):
         tasks_table = self.query_one("#tasks-table", DataTable)
 
         active_cursor = main_table.cursor_row
+        active_key = cursor_row_key(main_table)
         main_table.clear()
         for dl in active:
             dl_id = str(dl.get("id", "?"))[:8]
@@ -131,8 +150,7 @@ class DownloadsScreen(Screen):
             segments = str(dl.get("segments", "0/0"))
             main_table.add_row(dl_id, title, site, status, progress, speed, size, segments, key=dl.get("id"))
 
-        if active_cursor is not None and active_cursor < len(active):
-            main_table.move_cursor(row=active_cursor)
+        restore_cursor(main_table, active_key, active_cursor)
 
         tasks_table.clear()
         if main_table.cursor_row is not None and active:
@@ -153,23 +171,29 @@ class DownloadsScreen(Screen):
 
         completed_table = self.query_one("#completed-table", DataTable)
         completed_cursor = completed_table.cursor_row
+        completed_key = cursor_row_key(completed_table)
         completed_table.clear()
 
         history_items = download_tracker.get_history()
         self._completed_items = [dl for dl in history_items if dl.get("status") == "completed"]
 
-        for row_index, dl in enumerate(self._completed_items):
+        for dl in self._completed_items:
             dl_id = str(dl.get("id", "?"))[:8]
             title = str(dl.get("title", "?"))[:38]
             site = str(dl.get("site", "?"))
             size = str(dl.get("size", "-"))
             path = str(dl.get("path") or "-")
             finished = format_time(dl.get("end_time") or dl.get("last_update"))
-            row_key = f"{dl.get('id') or 'completed'}:{row_index}"
+            # Stable across refreshes (unlike the row index) so the cursor can follow the entry;
+            # the suffix only separates entries that share id and end time.
+            base_key = row_key = f"{dl.get('id') or 'completed'}:{dl.get('end_time') or dl.get('last_update') or ''}"
+            suffix = 1
+            while row_key in completed_table.rows:
+                row_key = f"{base_key}:{suffix}"
+                suffix += 1
             completed_table.add_row(dl_id, title, site, size, path, finished, key=row_key)
 
-        if completed_cursor is not None and completed_cursor < len(self._completed_items):
-            completed_table.move_cursor(row=completed_cursor)
+        restore_cursor(completed_table, completed_key, completed_cursor)
 
         self._update_buttons()
 
@@ -220,7 +244,11 @@ class DownloadsScreen(Screen):
 
     @on(Button.Pressed, "#btn-clear")
     def _on_clear(self) -> None:
-        download_tracker.clear_history()
+        try:
+            download_tracker.clear_completed_history()
+        except Exception as e:
+            self.app.notify(f"Could not clear completed downloads: {e}", severity="error")
+            return
         self._refresh_downloads()
         self.app.notify("Cleared completed downloads from tracker", severity="information")
 

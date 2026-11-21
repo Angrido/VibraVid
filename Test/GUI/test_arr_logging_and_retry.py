@@ -177,6 +177,20 @@ def test_unlimited_and_unmonitored_failures_do_not_count(queue_db, monkeypatch):
     assert ArrProcessingQueue.objects.get().attempts == 4
 
 
+def test_an_item_already_in_the_arr_queue_does_not_use_up_the_retries(queue_db, monkeypatch):
+    """A stalled torrent in Sonarr's own queue made VibraVid give up after max_retry_attempts polls, without ever trying."""
+    monkeypatch.setattr(arr_service, "_load_arr_config", lambda: {"max_retry_attempts": 2})
+    item = {"id": 31, "title": "In the client queue", "content_type": "movie", "tmdbId": 6}
+
+    for _ in range(3):
+        assert arr_service._enqueue_if_new(item, "polling")
+        arr_service._mark_failed(item, "in_arr_queue")
+
+    entry = ArrProcessingQueue.objects.get()
+    assert entry.attempts == 0
+    assert entry.media_request.last_error == "in_arr_queue"
+
+
 def test_import_not_confirmed_counts_as_attempt(queue_db, monkeypatch):
     monkeypatch.setattr(arr_service, "_load_arr_config", lambda: {"max_retry_attempts": 2})
     item = {"id": 30, "title": "Different numbering", "content_type": "episode", "tmdbId": 4}
@@ -215,3 +229,22 @@ def test_success_resets_attempts(queue_db, monkeypatch):
     assert arr_service._enqueue_if_new(item, "polling")
     arr_service._mark_completed(item)
     assert ArrProcessingQueue.objects.get().attempts == 0
+
+
+def test_a_title_downloaded_long_ago_is_enqueued_again_when_missing(queue_db, monkeypatch):
+    """Downloaded days ago, then its file deleted in Radarr: the done row is reopened (dedup_key is unique, a second row would be refused)."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    monkeypatch.setattr(arr_service, "_load_arr_config", lambda: {"max_retry_attempts": 3})
+    item = {"id": 11, "title": "Deleted later", "content_type": "movie", "tmdbId": 5}
+    assert arr_service._enqueue_if_new(item, "polling")
+    arr_service._mark_completed(item)
+    assert arr_service._enqueue_if_new(item, "polling") is False  # inside the 6-hour window
+
+    ArrProcessingQueue.objects.update(completed_at=timezone.now() - timedelta(days=2))
+    assert arr_service._enqueue_if_new(item, "webhook") is True
+    entry = ArrProcessingQueue.objects.get()
+    assert (entry.completed_at, entry.success) == (None, None)
+    assert entry.media_request.status == ArrMediaRequest.Status.PENDING

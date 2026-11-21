@@ -568,6 +568,12 @@
 	}
 	el("arr-auto").addEventListener("change", syncAutoSources);
 
+	// 0 is a valid value for some ARR fields (min="0"): only a missing/non-numeric value falls back.
+	function intOr(value, fallback) {
+		var n = typeof value === "number" ? value : parseInt(value, 10);
+		return Number.isFinite(n) ? n : fallback;
+	}
+
 	function fillArr(arr) {
 		arr = arr || {};
 		el("arr-enabled").checked = !!arr.enabled;
@@ -581,8 +587,8 @@
 		el("arr-poll-interval").value = arr.polling_interval || 300;
 		el("arr-resync-interval").value = arr.full_resync_interval || 21600;
 		el("arr-max-downloads").value = arr.max_concurrent_downloads || 1;
-		el("arr-native-priority-window").value = arr.native_webhook_priority_window_seconds || 120;
-		el("arr-seerr-fallback-delay").value = arr.seerr_fallback_delay_seconds || 20;
+		el("arr-native-priority-window").value = intOr(arr.native_webhook_priority_window_seconds, 120);
+		el("arr-seerr-fallback-delay").value = intOr(arr.seerr_fallback_delay_seconds, 20);
 		el("arr-sonarr-url").value = (arr.sonarr || {}).url || "";
 		el("arr-sonarr-key").value = (arr.sonarr || {}).api_key || "";
 		el("arr-radarr-url").value = (arr.radarr || {}).url || "";
@@ -604,8 +610,8 @@
 			polling_interval: parseInt(el("arr-poll-interval").value, 10) || 300,
 			full_resync_interval: parseInt(el("arr-resync-interval").value, 10) || 21600,
 			max_concurrent_downloads: parseInt(el("arr-max-downloads").value, 10) || 1,
-			native_webhook_priority_window_seconds: parseInt(el("arr-native-priority-window").value, 10) || 120,
-			seerr_fallback_delay_seconds: parseInt(el("arr-seerr-fallback-delay").value, 10) || 20,
+			native_webhook_priority_window_seconds: intOr(el("arr-native-priority-window").value, 120),
+			seerr_fallback_delay_seconds: intOr(el("arr-seerr-fallback-delay").value, 20),
 			sonarr: { url: el("arr-sonarr-url").value.trim(), api_key: el("arr-sonarr-key").value.trim() },
 			radarr: { url: el("arr-radarr-url").value.trim(), api_key: el("arr-radarr-key").value.trim() },
 			seerr: { webhook_secret: el("arr-webhook-secret").value.trim() },

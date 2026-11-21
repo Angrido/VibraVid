@@ -30,7 +30,7 @@
   background: var(--cn-surf); color: var(--cn-white); font-family: var(--cn-sans);
   box-shadow: var(--cn-e3);
 }
-.cn-sch::backdrop { background: rgba(8,7,5,.72); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+.cn-sch::backdrop { background: var(--cn-scrim); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
 .cn-sch[open] { animation: cn-pop var(--cn-t) var(--cn-ease-out) both; }
 .cn-sch .cn-tag { color: var(--cn-faint); }
 .cn-sch h2 { font-size: 20px; font-weight: 700; letter-spacing: -.02em; margin-top: 6px; overflow-wrap: anywhere; }
@@ -59,7 +59,7 @@
   display: grid; gap: 1px; justify-items: center; min-width: 0;
 }
 .cn-sch-cell small {
-  font-size: 9.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .7;
+  max-width: 100%; overflow: hidden; font-size: 12px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase;
 }
 .cn-sch-cell b { font-size: 16px; font-weight: 700; }
 .cn-sch-quick .cn-sch-cell { padding: 8px 13px; font-size: 12.5px; }
@@ -78,8 +78,9 @@
 .cn-sch-when.is-bad span { color: var(--cn-bad); }
 .cn-sch-foot { margin-top: 18px; display: flex; justify-content: flex-end; gap: 10px; }
 
+/* Centred without a transform: cn-rise animates transform and ends on "none". */
 .cn-sch-toast {
-  position: fixed; left: 50%; bottom: 26px; z-index: 80; transform: translateX(-50%);
+  position: fixed; inset-inline: 0; bottom: 26px; z-index: 80; margin-inline: auto; width: fit-content;
   max-width: calc(100vw - 28px); display: flex; align-items: center; gap: 14px;
   padding: 12px 18px; border-radius: var(--cn-radius); background: var(--cn-surf-3);
   box-shadow: var(--cn-e3);

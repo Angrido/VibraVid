@@ -55,7 +55,9 @@ if [ -S /var/run/docker.sock ]; then
         SOCK_GROUP=$(getent group "$SOCK_GID" | cut -d: -f1)
         [ -n "$SOCK_GROUP" ] && usermod -aG "$SOCK_GROUP" appuser 2>/dev/null || true
     else
-        chmod 666 /var/run/docker.sock 2>/dev/null || true
+        # Never chmod the socket: a bind mount shares the host's inode, so 666 would hand every
+        # local user of the HOST root-equivalent access to Docker. Group root is not shared either.
+        echo "VibraVid: WARNING - /var/run/docker.sock belongs to group root (gid 0), which appuser is not in: the in-app updater cannot use it. Update with 'docker compose pull && docker compose up -d', or give the socket a dedicated group on the host (e.g. 'docker')."
     fi
 fi
 

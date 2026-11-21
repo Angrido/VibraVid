@@ -69,9 +69,11 @@
         }
         return false;
     }
+    // skipped() first: provider titles and whole log <pre> blocks must not pay for every pattern.
     function textNode(target) {
+        if (skipped(target.parentElement)) return;
         const next = translate(target.nodeValue);
-        if (next !== target.nodeValue && !skipped(target.parentElement)) target.nodeValue = next;
+        if (next !== target.nodeValue) target.nodeValue = next;
     }
     function attributes(element) {
         if (skipped(element)) return;

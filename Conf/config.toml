@@ -119,7 +119,7 @@ param_final = [
 subtitle_disposition_language = "it-it_forced"
 merge_audio = true
 merge_subtitle = true
-# "auto", "on" or "off"
+# "auto", "copy", "srt", "vtt" or "ass"
 force_subtitle = "auto"
 mux_dtsx = false
 # Re-mux each downloaded fMP4 track with ffmpeg to reset its fragment timestamps (a full extra pass: slow on large files).

@@ -108,8 +108,8 @@ def _format_timestamp(seconds: float, is_vtt: bool) -> str:
     return f"{h:02d}:{m:02d}:{s:06.3f}".replace(".", ",")
 
 
-def _normalize_subtitle_timestamps(content: str, target_format: str) -> str:
-    """Shift all cue timestamps so the first one starts at 0:00:00,000."""
+def _normalize_subtitle_timestamps(content: str, target_format: str, media_duration: float | None = None) -> str:
+    """Shift all cue timestamps so the first one starts at 0:00:00,000, when they cannot be on the media timeline."""
     matches = list(_TS_RE.finditer(content))
     if not matches:
         return content
@@ -125,8 +125,10 @@ def _normalize_subtitle_timestamps(content: str, target_format: str) -> str:
 
     offset = min(first_starts)
 
-    # Only shift if the offset is implausibly large (avoids touching normal files).
-    if offset < 3600.0:
+    # Only shift wall-clock style timestamps. With the media duration known, a first cue inside it is legitimate
+    # (a forced-narrative track can start at 01:12:30); without it, an hour is the guess for "implausibly late".
+    limit = media_duration if media_duration and media_duration > 0 else 3600.0
+    if offset < limit:
         return content
 
     is_vtt = target_format.lower() == "vtt"
@@ -174,6 +176,7 @@ def convert_ttml_to_format(
     output_path: str | None = None,
     target_format: str = "srt",
     chunk_offsets: list[float] | None = None,
+    media_duration: float | None = None,
 ) -> bool:
     """
     Convert TTML file or .m4s fragment containing TTML to SRT or VTT format.
@@ -188,6 +191,8 @@ def convert_ttml_to_format(
             replaces the self-referential cumulative-offset estimate with the
             exact offset from the manifest -- correct even across caption-free
             gap chunks, which the estimate can't see.
+        media_duration (Optional[float]): Duration (seconds) of the media the track is muxed with. A first cue
+            inside it is kept where it is; only one beyond it is rebased to 0. Unknown = rebase past one hour.
 
     Returns:
         bool: True if conversion was successful, False otherwise.
@@ -340,7 +345,7 @@ def convert_ttml_to_format(
         # Combine output
         delimiter = "\n\n" if target_format == "srt" else "\n"
         output_content = delimiter.join(all_captions)
-        output_content = _normalize_subtitle_timestamps(output_content, target_format)
+        output_content = _normalize_subtitle_timestamps(output_content, target_format, media_duration)
 
         # Add VTT header if needed
         if target_format == "vtt" and not output_content.startswith("WEBVTT"):

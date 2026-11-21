@@ -558,7 +558,7 @@ class DecryptPipelineMixin(
             failed = collect_failed_segments(dl_segs, paths, stream_dir, default_ext)
             # A wrong-key abort stops downloads on purpose: the "missing"
             # segments below are intentional, not CDN failures -- reporting
-            # them as Dio Cancaro/missing would be pure noise on top of the
+            # them as missing would be pure noise on top of the
             # Terminating/decrypt-failure lines.
             wrong_key_abort = bool(ctx.decrypt_aborted_reason and "wrong key" in ctx.decrypt_aborted_reason)
             if failed and not wrong_key_abort:
@@ -816,11 +816,13 @@ class DecryptPipelineMixin(
             return
 
         try:
-            out_path.unlink(missing_ok=True)
-            norm_path.rename(out_path)
+            # One atomic swap: unlinking first left neither copy when the rename then failed (Windows sharing violation)
+            norm_path.replace(out_path)
         except OSError as exc:
             logger.error(f"[normalize] rename-back failed, keeping un-normalized file: {exc}")
-            norm_path.unlink(missing_ok=True)
+            # Only drop the normalized copy while the merged track is still there to keep
+            if out_path.exists():
+                norm_path.unlink(missing_ok=True)
 
     def _normalize_timestamps(
         self, ctx: _SegmentDownloadContext, out_path: Path, is_plain_subtitle: bool, stream_is_encrypted: bool, already_decrypted_per_segment: bool

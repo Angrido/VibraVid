@@ -18,6 +18,7 @@ from VibraVid.cli.command.queue import enqueue_argv
 from VibraVid.core.ui.tracker import download_tracker
 from VibraVid.tui.formatting import format_time
 from VibraVid.tui.i18n import t
+from VibraVid.tui.screens.downloads import cursor_row_key, restore_cursor
 from VibraVid.tui.widgets.custom_footer import CustomFooter
 from VibraVid.tui.widgets.topbar import TopBar
 from VibraVid.utils.system.system_open import open_file, open_folder
@@ -85,6 +86,7 @@ class HistoryScreen(Screen):
 
         table = self.query_one("#history-table", DataTable)
         current_cursor = table.cursor_row
+        current_key = cursor_row_key(table)
         table.clear()
 
         for dl in items:
@@ -106,6 +108,14 @@ class HistoryScreen(Screen):
             else:
                 status_fmt = f"[white]{status}[/white]"
 
+            # Stable across refreshes so the cursor can follow the entry, and unique (the bare id raised
+            # DuplicateKey on a repeated download): same key as the Downloads screen's completed table.
+            base_key = row_key = f"{dl.get('id')}:{dl.get('end_time') or dl.get('last_update') or ''}"
+            suffix = 1
+            while row_key in table.rows:
+                row_key = f"{base_key}:{suffix}"
+                suffix += 1
+
             table.add_row(
                 item_id,
                 title,
@@ -114,11 +124,10 @@ class HistoryScreen(Screen):
                 status_fmt,
                 path_short,
                 end_time,
-                key=str(dl.get("id")),
+                key=row_key,
             )
 
-        if current_cursor is not None and current_cursor < len(items):
-            table.move_cursor(row=current_cursor)
+        restore_cursor(table, current_key, current_cursor)
 
         counts = {}
         for dl in items:

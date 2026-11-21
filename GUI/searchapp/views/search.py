@@ -70,8 +70,10 @@ def search(request: HttpRequest) -> HttpResponse:
         for warning in getattr(api, "search_warnings", []):
             messages.warning(request, warning)
         results = [_media_item_to_display_dict(item, site) for item in media_items]
-    except Exception as e:
-        messages.error(request, f"Search error: {e}")
+    except Exception:
+        # The exception text can carry the provider's host name: it goes to the log, not to the page.
+        logger.exception(f"Search failed on {site!r}")
+        messages.error(request, "The search failed. Try again, or open the logs for details.")
         return _back_to_search(form)
 
     download_form = DownloadForm()

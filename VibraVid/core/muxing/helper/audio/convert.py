@@ -44,10 +44,14 @@ def convert_audio(input_path: str, ffmpeg_params: list[str]) -> str | None:
 
     # Get duration for progress tracking
     total_duration = get_video_duration(str(input_path_obj))
-    capture_ffmpeg_real_time(ffmpeg_cmd, f"[cyan]Converting to {output_ext.upper()}", total_duration)
+    result = capture_ffmpeg_real_time(ffmpeg_cmd, f"[cyan]Converting to {output_ext.upper()}", total_duration)
 
-    if not output_path.exists():
-        logger.error(f"Output file was not created: {output_path}")
+    # The caller deletes the original on success: a failed or killed encode can still leave a partial file, so
+    # only a clean exit with a non-empty output counts.
+    failed = result.get("exit_code") != 0 or result.get("timed_out")
+    if failed or not output_path.exists() or output_path.stat().st_size == 0:
+        logger.error(f"Audio conversion failed (exit code {result.get('exit_code')}, timed out: {bool(result.get('timed_out'))}): {output_path}")
+        output_path.unlink(missing_ok=True)
         return None
 
     logger.info(f"Audio converted successfully: {output_path}")

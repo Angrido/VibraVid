@@ -113,3 +113,40 @@ async def test_a_whole_season_is_picked_with_one_key(monkeypatch):
         await pilot.pause()
         assert screen._episode_selections[1] == set()
         assert label(0) == "S1  ·  3 ep"
+
+
+@pytest.mark.anyio
+async def test_a_slow_season_load_of_a_previous_provider_is_ignored(monkeypatch):
+    """`exclusive=True` cancels the asyncio side only: the old thread still returns its seasons."""
+    import threading
+    from types import SimpleNamespace
+
+    from VibraVid.tui.app import VibraVidApp
+
+    release = threading.Event()
+    slow = [SimpleNamespace(number=9, episodes=[], image=None)]
+
+    def get_seasons(site, item):
+        if site == "site1":
+            release.wait(5)
+            return slow
+        return _fake_seasons()
+
+    monkeypatch.setattr(bridge, "get_seasons", get_seasons)
+    item1, item2 = MockItem("Test Series"), MockItem("Test Series")
+    app = VibraVidApp()
+    async with app.run_test(size=(140, 40)) as pilot:
+        screen = TitleDetailScreen(site="site1", item=item1, providers=[("site1", item1), ("site2", item2)])
+        await app.push_screen(screen)
+        await pilot.pause()
+        screen.query_one("#providers").index = 1
+        for _ in range(40):
+            await pilot.pause(0.1)
+            if screen._seasons:
+                break
+        assert [s.number for s in screen._seasons] == [1, 2, 3]
+
+        release.set()
+        await pilot.pause(0.5)
+        assert screen._current_site == "site2"
+        assert [s.number for s in screen._seasons] == [1, 2, 3]

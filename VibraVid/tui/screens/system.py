@@ -38,6 +38,8 @@ from VibraVid.utils.upload.update import (
 )
 from VibraVid.utils.upload.version import __title__, __version__
 
+_LOG_TAIL_BYTES = 1024 * 1024  # room for 1000 lines of up to ~1 KB each
+
 logger = logging.getLogger(__name__)
 
 
@@ -180,13 +182,19 @@ class SystemScreen(Screen):
             return
 
         try:
-            viewer.write(f"=== {path.name} ({path.stat().st_size} bytes) ===\n")
-            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-            # Truncate to last 1000 lines for smooth display
+            size = path.stat().st_size
+            viewer.write(f"=== {path.name} ({size} bytes) ===\n")
+            # Only the last 1000 lines are shown and this runs on the UI thread on every highlight:
+            # read the tail of the file, not the whole log.
             max_lines = 1000
-            if len(lines) > max_lines:
-                viewer.write(f"[Showing last {max_lines} lines out of {len(lines)}]\n")
+            with path.open("rb") as fh:
+                fh.seek(max(0, size - _LOG_TAIL_BYTES))
+                lines = fh.read().decode("utf-8", errors="replace").splitlines()
+            if size > _LOG_TAIL_BYTES:
+                lines = lines[1:]  # the first line is almost always cut by the seek
+            if size > _LOG_TAIL_BYTES or len(lines) > max_lines:
                 lines = lines[-max_lines:]
+                viewer.write(f"[Showing last {len(lines)} lines]\n")
             for line in lines:
                 viewer.write(line)
         except Exception as e:

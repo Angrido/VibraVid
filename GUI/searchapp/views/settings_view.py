@@ -236,8 +236,9 @@ def upload_service_zip(request: HttpRequest) -> JsonResponse:
         }
         return JsonResponse(result, status=200 if installed_services else 400)
 
-    except Exception as e:
-        return JsonResponse({"success": False, "error": f"Errore durante l'installazione: {e}"}, status=500)
+    except Exception:
+        logger.exception("Service upload failed")
+        return JsonResponse({"success": False, "error": "Errore durante l'installazione: dettagli nei log."}, status=500)
 
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -257,9 +258,9 @@ def remove_service_view(request: HttpRequest) -> JsonResponse:
         removed = services_admin.remove_service(data.get("name"))
     except services_admin.ServiceRemovalError as exc:
         return JsonResponse({"success": False, "error": exc.message}, status=exc.status)
-    except OSError as exc:
+    except OSError:
         logger.exception("Service removal failed")
-        return JsonResponse({"success": False, "error": f"Impossibile rimuovere il servizio: {exc}"}, status=500)
+        return JsonResponse({"success": False, "error": "Impossibile rimuovere il servizio: dettagli nei log."}, status=500)
 
     errors = _reload_service_registries([removed])
     return JsonResponse({
@@ -373,9 +374,9 @@ def save_settings(request: HttpRequest) -> JsonResponse:
                 logger.exception("Backup failed: %s", e)
 
         if patch is None:
-            content_saved = content + "\n"
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(content_saved)  # as typed: the comments in the file are the user's guide
+            content_saved = content + "\n"  # as typed: the comments in the file are the user's guide
+            # Atomic: an in-place write truncated config.toml/login.toml when the disk filled up mid-write.
+            config_manager._write_toml(file_path, content_saved)
         else:
             content_saved = config_manager.patch_file(file_type, patch, data.get('delete') or [])  # also reloads the cache
 

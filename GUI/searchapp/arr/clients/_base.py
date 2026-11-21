@@ -56,6 +56,22 @@ class ArrClient:
     def _get(self, path: str, params: dict | None = None) -> requests.Response:
         return self._request("GET", path, params=params)
 
+    def _exists(self, path: str) -> bool:
+        """False only when the server answers 404.
+
+        A timeout, 401 or 5xx says nothing about the item, and callers discard a finished download on False.
+        """
+        try:
+            resp = requests.get(f"{self._base}{path}", headers=self._headers, timeout=self.timeout)
+        except requests.RequestException as exc:
+            self.logger.warning(f"{self.label} could not check {path} ({exc}), assuming it still exists")
+            return True
+        if resp.status_code == 404:
+            return False
+        if not resp.ok:
+            self.logger.warning(f"{self.label} answered {resp.status_code} for {path}, assuming it still exists")
+        return True
+
     def _get_safe(self, path: str, params: dict | None = None) -> list[dict[str, Any]]:
         """GET that returns an empty list on any HTTP/network error (no retry)."""
         url = f"{self._base}{path}"

@@ -51,6 +51,7 @@ def test_cleanup_disabled_in_config_never_deletes(monkeypatch, tmp_path, removed
 def _finalizing_downloader(tmp_path):
     d = _downloader(tmp_path)
     d.output_path = str(tmp_path / "episode.mkv")
+    (tmp_path / "episode.mkv").write_bytes(b"x")  # verification now also requires the final file to exist
     d.copied_subtitles = []
     d.copied_audios = []
     d.download_id = None

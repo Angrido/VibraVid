@@ -105,6 +105,17 @@ def test_bot_post_endpoints_reject_json_that_is_not_an_object(client, monkeypatc
     assert _post(client, url, body).status_code == 400
 
 
+@pytest.mark.parametrize("url", BOT_POST)
+def test_bot_post_endpoints_refuse_what_another_site_could_send_when_no_secret_is_set(client, monkeypatch, url):
+    """The views are csrf_exempt: without a secret, a page on another site could POST a text/plain form whose body parses as JSON."""
+    monkeypatch.delenv("VIBRAVID_BOT_SECRET", raising=False)
+    smuggled = '{"site": "x", "payload": {"name": "x", "type": "film"}, "a": "="}'
+
+    assert client.post(url, data=smuggled, content_type="text/plain").status_code == 403
+    assert _post(client, url, {}, headers={"Sec-Fetch-Site": "cross-site"}).status_code == 403
+    assert _post(client, url, {}, headers={"Sec-Fetch-Site": "same-origin"}).status_code == 400  # allowed, body empty
+
+
 @pytest.mark.parametrize("url", BOT_GET)
 def test_bot_get_endpoints_refuse_post(client, monkeypatch, url):
     monkeypatch.delenv("VIBRAVID_BOT_SECRET", raising=False)
@@ -158,6 +169,20 @@ def test_webhook_with_the_right_token_still_validates_the_body(client, monkeypat
 
     assert response.status_code == 400
     assert response.json()["message"] == "Invalid JSON"
+
+
+@pytest.mark.parametrize("url, section, flag", WEBHOOKS)
+@pytest.mark.parametrize("body", [[], "text", 3, {"eventType": None, "notification_type": None}])
+def test_webhook_answers_a_body_that_is_not_an_object_with_a_400_and_no_exception_text(client, monkeypatch, url, section, flag, body):
+    """`[]` reached payload.get() and the 500 carried "'list' object has no attribute 'get'" back to the caller."""
+    _arr_config(monkeypatch, **{section: {"webhook_secret": SECRET}})
+    monkeypatch.setattr(arr_service, "trigger_webhook_sync", lambda *a, **k: None, raising=False)
+    monkeypatch.setattr(arr_service, "trigger_sonarr_webhook_sync", lambda *a, **k: None, raising=False)
+    monkeypatch.setattr(arr_service, "trigger_radarr_webhook_sync", lambda *a, **k: None, raising=False)
+    response = _post(client, url, body, headers={"X-Webhook-Token": SECRET})
+
+    assert response.status_code in (200, 400)
+    assert "attribute" not in response.content.decode()
 
 
 @pytest.mark.parametrize("url, section, flag", WEBHOOKS)
@@ -222,3 +247,53 @@ def test_webhook_downloads_nothing_when_automatic_downloads_are_off(client, monk
     response = _post(client, url, payload)
 
     assert response.status_code == 200 and response.json()["status"] == "manual"
+
+
+# --- /api/bot/download/ -----------------------------------------------------------------------------------------------------
+def _fake_jobs(monkeypatch):
+    calls = []
+
+    def fake_run(site, payload, season=None, episodes=None, media_type="Film", **_kw):
+        calls.append(site)
+        return type("Job", (), {"download_id": f"{site}_job{len(calls)}"})()
+
+    monkeypatch.setattr(api_bot, "_run_download_in_thread", fake_run)
+    return calls
+
+
+def test_bot_download_rejects_an_unknown_site_before_queuing(client, monkeypatch):
+    monkeypatch.delenv("VIBRAVID_BOT_SECRET", raising=False)
+    calls = _fake_jobs(monkeypatch)
+
+    response = _post(client, "/api/bot/download/", {"site": "nosuchsite", "payload": {"name": "X", "is_movie": True}})
+
+    assert response.status_code == 400
+    assert response.json() == {"error": "sito non disponibile"}
+    assert calls == []
+
+
+def test_bot_download_returns_the_id_of_the_job_it_queued(client, monkeypatch):
+    """Two identical requests must not share an id: a cancel from one chat would stop the other."""
+    monkeypatch.delenv("VIBRAVID_BOT_SECRET", raising=False)
+    monkeypatch.setattr(api_bot, "is_site_available", lambda site: site == "streamingcommunity")
+    _fake_jobs(monkeypatch)
+    body = {"site": "streamingcommunity", "payload": {"name": "Film1", "is_movie": True}}
+
+    first = _post(client, "/api/bot/download/", body).json()
+    second = _post(client, "/api/bot/download/", body).json()
+
+    assert first == {"queued": True, "download_id": "streamingcommunity_job1", "title": "Film1"}
+    assert second["download_id"] == "streamingcommunity_job2"
+
+
+# --- Sonarr "On Episode File Delete" (documented trigger in arr.md) ----------------------------------------------------------
+def test_sonarr_episode_file_delete_starts_a_sync(client, monkeypatch):
+    synced = []
+    monkeypatch.setattr(arr_service, "trigger_sonarr_webhook_sync", lambda payload: synced.append(payload) or 0)
+    _arr_config(monkeypatch, auto_download=True)
+    payload = {"eventType": "EpisodeFileDelete", "series": {"id": 1, "title": "Show", "tmdbId": 1001}, "episodes": []}
+
+    response = _post(client, "/api/arr/webhook/sonarr/", payload)
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "Processing Sonarr event EPISODEFILEDELETE"

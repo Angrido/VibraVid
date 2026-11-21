@@ -287,7 +287,10 @@ class StreamingMuxMixin:
                     for _seg in _segs:
                         _chunk_offsets.append(_running)
                         _running += _seg.duration
-                _converted = convert_subtitle(str(_path), force_subtitle, chunk_offsets=_chunk_offsets)
+                _converted = convert_subtitle(
+                    str(_path), force_subtitle, chunk_offsets=_chunk_offsets,
+                    media_duration=video_duration_cap or getattr(video_stream, "duration", None) or None,
+                )
                 if not _converted:
                     logger.warning(f"streaming_mux: subtitle conversion failed for {_path} -- dropping this track from the fast-path mux")
                     continue

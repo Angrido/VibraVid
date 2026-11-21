@@ -27,12 +27,23 @@ share/python-wheels/
 pip-log.txt
 pip-delete-this-directory.txt
 
+# Test, lint and coverage caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
 # Translations
 *.mo
 *.pot
 
-# Environments
+# Environments and secrets: .env, .env.telegram, ... (the *.example templates stay tracked)
 .env
+.env.*
+!.env*.example
 .venv
 env/
 venv/
@@ -41,34 +52,43 @@ env.bak/
 venv.bak/
 downloaded_files/
 
-# IDEs
+# Widevine / PlayReady device files hold private keys
+*.wvd
+*.prd
+
+# IDEs and OS files
 .idea
 .vscode
-.ruff_cache
-
-# Other
-start.sh
 .DS_Store
-GUI/db.sqlite3
+Thumbs.db
+desktop.ini
+
+# Local state written by the app
+start.sh
+GUI/db.sqlite3*
+GUI/.django_secret_key
+GUI/.migrate-pending
 Conf/domains.json
 Conf/domain_overrides.json
 Conf/login.toml
 Conf/remote.json
 Conf/migration-*/
+# Settings > raw editor keeps a .backup of config.toml/login.toml (credentials included); writes go through a .tmp
+Conf/*.backup
+Conf/*.tmp
 /.cache
 !/.cache/arr
 !/.cache/arr/.gitkeep
-.claude
-/.claude
-CLAUDE.md
-
 Vibe/*
 /Video/
-GUI/.django_secret_key
 /data/
 
 # MkDocs build output
 /site/
+
+# Agent tooling, local only (the AGENTS.md files are the shared guides)
+.claude/
+CLAUDE.md
 .mcp.json
 .agentsroom/handoff-transcript-*.txt
 .agentsroom/handoff-summary-*.md

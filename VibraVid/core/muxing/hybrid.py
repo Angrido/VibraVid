@@ -177,7 +177,8 @@ def probe_media_file(file_path: str) -> dict[str, Any]:
         return probe
 
     try:
-        simple_probe = get_media_metadata(str(file_obj))
+        # Hybrid decisions need quality / HDR flags only: skip the packet scan that reads the whole video for its bit rate.
+        simple_probe = get_media_metadata(str(file_obj), with_bitrate=False)
         if isinstance(simple_probe, dict):
             probe.update(simple_probe)
     except Exception as exc:
@@ -338,6 +339,10 @@ def _select_hybrid_video(video_track, other_videos):
     return None
 
 
+def _hybrid_work_dir(output_path: str, filename_base: str) -> Path:
+    return Path(output_path).parent / f"{filename_base}_hybrid_tmp"
+
+
 def build_hybrid_output(
     video_track: dict[str, Any],
     other_videos: Iterable[dict[str, Any]],
@@ -348,6 +353,24 @@ def build_hybrid_output(
     chapters: list | None = None,
 ) -> str | None:
     """Build a hybrid DV + HDR10 output when the media probes match the script workflow; *chapters* are baked into the same mkvmerge command."""
+    try:
+        return _build_hybrid_output(video_track, other_videos, audio_tracks, subtitle_tracks, output_path, filename_base, chapters)
+    finally:
+        # The work dir sits next to the output (library folder) and holds raw HEVC intermediates of tens of GB:
+        # remove it on every exit, not only on success.
+        if CLEANUP_TMP:
+            os_manager.fast_rmtree(str(_hybrid_work_dir(output_path, filename_base)))
+
+
+def _build_hybrid_output(
+    video_track: dict[str, Any],
+    other_videos: Iterable[dict[str, Any]],
+    audio_tracks: list[dict[str, Any]],
+    subtitle_tracks: list[dict[str, Any]],
+    output_path: str,
+    filename_base: str,
+    chapters: list | None = None,
+) -> str | None:
     if not video_track:
         return None
 
@@ -386,7 +409,7 @@ def build_hybrid_output(
         output_file = output_file.with_suffix(".mkv")
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
-    work_dir = output_file.parent / f"{filename_base}_hybrid_tmp"
+    work_dir = _hybrid_work_dir(str(output_file), filename_base)
     work_dir.mkdir(parents=True, exist_ok=True)
 
     base_hevc = work_dir / f"{filename_base}_hdr.hevc"
@@ -542,8 +565,4 @@ def build_hybrid_output(
         return None
 
     logger.info(f"Hybrid output created: {output_file}")
-
-    if CLEANUP_TMP:
-        os_manager.fast_rmtree(work_dir)
-
     return str(output_file)

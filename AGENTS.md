@@ -29,7 +29,7 @@ CLI, Textual TUI, Django web GUI (+ Sonarr/Radarr "ARR" integration), Telegram b
 pip install -r requirements.txt -r GUI/requirements.txt pytest anyio   # dev setup
 ruff check .                         # lint (line length 120; Test/ excluded)
 python -m pytest -q Test/<Area>      # run the area you touched; full suite: python -m pytest -q
-python -m pytest -q Test/e2e         # needs `pip install playwright && playwright install chromium`; auto-skipped otherwise
+python -m pytest -q Test/e2e         # needs `pip install playwright && playwright install chromium`; runs only when targeted by path
 python manual.py ...                 # CLI     | python tui.py  → TUI
 python GUI/manage.py runserver       # web GUI
 ```
@@ -42,6 +42,8 @@ Muxing/retag tests need `ffmpeg`/`ffprobe`/`mkvpropedit` on PATH. Tests never do
 - New `.py` files start with a creation-date comment `# DD.MM.YY` (e.g. `# 21.11.26`), like every existing file.
 - Commit subject `[Area] Verb ...` (`[GUI]`, `[Velora]`, `[ARR]`, `[Docs]`, `[Test]`, `[CI]`...). The verb drives the
   automatic version bump: `Add/Introduce/Implement/Support/Allow/Enable/New` = minor, `BREAKING` = major, else patch.
+- A commit written by an agent ends with `Co-Authored-By: Lucio Gigliofiorito <lucio.g95@outlook.com>` (the
+  maintainer), next to the agent's own attribution line.
 - Never edit the version by hand (`pyproject.toml`, `VibraVid/utils/upload/version.py`): CI bumps it on `main`.
 - Comments and docstrings explain *why*; user-facing docs live in `.github/MkDoc/docs/` and must follow behaviour changes.
 
@@ -62,4 +64,5 @@ Muxing/retag tests need `ffmpeg`/`ffprobe`/`mkvpropedit` on PATH. Tests never do
 | CLI flags | `.github/MkDoc/docs/cli.md` |
 | ARR / Sonarr / Radarr | `.github/MkDoc/docs/arr.md` |
 | GUI visual work | `design-system/MASTER.md` |
+| Agent plugins and skills (Claude Code) | `.github/CONTRIBUTING.md`, section "Working with AI coding agents" |
 | Docker, NAS, Telegram, remote CDM, hooks, vault, login | matching file in `.github/MkDoc/docs/` |

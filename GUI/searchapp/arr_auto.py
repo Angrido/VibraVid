@@ -95,14 +95,7 @@ def start_arr_auto_loop() -> None:
             return
         _loop_started = True
 
-    from .arr.arr_service import _load_arr_config
-
-    cfg = _load_arr_config()
-    if not cfg.get("enabled"):
-        logger.info("[ARR] ARR services disabled, not starting loop")
-        _loop_started = False
-        return
-
+    # Started even when ARR is off: the loop idles until it is enabled, so enabling it in Settings needs no restart.
     thread = threading.Thread(
         target=_arr_loop,
         daemon=True,

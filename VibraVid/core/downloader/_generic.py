@@ -1310,9 +1310,7 @@ class Generic_Downloader(BaseDownloader):
         return None
 
     def _generic_failed_segments(self) -> int:
-        """Number of segments that failed to download across manifest sources (GUI only, else 0)."""
-        if not context_tracker.is_gui:
-            return 0
+        """Number of segments that failed to download across manifest sources, CLI and GUI alike (see BaseDownloader._failed_segments)."""
         total = 0
         for md, _ in self._active:
             try:
@@ -1968,7 +1966,7 @@ class Generic_Downloader(BaseDownloader):
             logger.error("No media downloaded")
             return self._fail("No media downloaded")
         
-        if context_tracker.is_gui and self._generic_failed_segments():
+        if self._generic_failed_segments():
             n = self._generic_failed_segments()
             logger.error(f"{n} segment(s) failed to download")
             return self._fail(f"{n} segment(s) failed to download")

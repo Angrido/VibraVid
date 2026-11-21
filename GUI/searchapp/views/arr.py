@@ -24,6 +24,15 @@ QUEUE_KEY = re.compile(r"radarr_\d+|sonarr_\d+_s\d+_e\d+")
 MAX_QUEUE_KEYS = 500
 
 
+def _json_object(request: HttpRequest) -> dict | None:
+    """The request body as a JSON object, or None: the webhook code reads it with .get(), so `[]` or `3` must not get that far."""
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def _manual_mode_response(source_tag: str) -> JsonResponse:
     logger.info(f"[{source_tag} WEBHOOK] Automatic downloads are off, nothing will be downloaded")
     return JsonResponse({"status": "manual", "message": "Automatic downloads are off in VibraVid"}, status=200)
@@ -129,15 +138,13 @@ def seerr_webhook(request: HttpRequest) -> JsonResponse:
             return JsonResponse({"status": "error", "message": "Invalid webhook token"}, status=403)
 
         # Parse payload
-        try:
-            payload = json.loads(request.body.decode("utf-8"))
-        except json.JSONDecodeError:
+        payload = _json_object(request)
+        if payload is None:
             logger.error("[SEERR WEBHOOK] Invalid JSON in request body")
             return JsonResponse({"status": "error", "message": "Invalid JSON"}, status=400)
 
-
         # Detect event type
-        notification_type = payload.get("notification_type", "").upper()
+        notification_type = str(payload.get("notification_type") or "").upper()
         logger.info(f"[SEERR WEBHOOK] notification_type: {notification_type}")
 
         # Accept multiple variants: MEDIA_APPROVED, MEDIA_AUTO_APPROVED, MEDIA_PENDING, TEST_NOTIFICATION
@@ -225,7 +232,7 @@ def seerr_webhook(request: HttpRequest) -> JsonResponse:
 
     except Exception as exc:
         logger.error(f"[SEERR WEBHOOK] Unexpected error: {exc}", exc_info=True)
-        return JsonResponse({"status": "error", "message": str(exc)}, status=500)
+        return JsonResponse({"status": "error", "message": "The webhook could not be processed."}, status=500)
 
 
 @csrf_exempt
@@ -271,14 +278,12 @@ def sonarr_webhook(request: HttpRequest) -> JsonResponse:
             logger.warning("[SONARR WEBHOOK] Missing or invalid webhook token")
             return JsonResponse({"status": "error", "message": "Invalid webhook token"}, status=403)
 
-        try:
-            payload = json.loads(request.body.decode("utf-8"))
-        except json.JSONDecodeError:
+        payload = _json_object(request)
+        if payload is None:
             logger.error("[SONARR WEBHOOK] Invalid JSON in request body")
             return JsonResponse({"status": "error", "message": "Invalid JSON"}, status=400)
 
-
-        event_type = payload.get("eventType", "UNKNOWN").upper()
+        event_type = str(payload.get("eventType") or "UNKNOWN").upper()
         logger.info(f"[SONARR WEBHOOK] eventType: {event_type}")
 
         series_data = payload.get("series", {}) or {}
@@ -312,7 +317,8 @@ def sonarr_webhook(request: HttpRequest) -> JsonResponse:
         # Handle events that should trigger sync
         # - DOWNLOAD/GRAB: Sonarr has downloaded episodes -> sync those episodes
         # - SeriesAdd: Series was added to Sonarr (usually after Seerr approval) -> sync missing episodes
-        if event_type in ("DOWNLOAD", "GRAB", "SERIESADD"):
+        # - EpisodeFileDelete: a file was removed (trigger documented in arr.md) -> sync missing episodes
+        if event_type in ("DOWNLOAD", "GRAB", "SERIESADD", "EPISODEFILEDELETE"):
             series_data = payload.get("series", {})
             episodes = payload.get("episodes", [])
             logger.info(f"[SONARR WEBHOOK] Series: {series_data.get('title')} (id={series_data.get('id')})")
@@ -364,7 +370,7 @@ def sonarr_webhook(request: HttpRequest) -> JsonResponse:
 
     except Exception as exc:
         logger.error(f"[SONARR WEBHOOK] Unexpected error: {exc}", exc_info=True)
-        return JsonResponse({"status": "error", "message": str(exc)}, status=500)
+        return JsonResponse({"status": "error", "message": "The webhook could not be processed."}, status=500)
 
 
 @csrf_exempt
@@ -405,14 +411,12 @@ def radarr_webhook(request: HttpRequest) -> JsonResponse:
             logger.warning("[RADARR WEBHOOK] Missing or invalid webhook token")
             return JsonResponse({"status": "error", "message": "Invalid webhook token"}, status=403)
 
-        try:
-            payload = json.loads(request.body.decode("utf-8"))
-        except json.JSONDecodeError:
+        payload = _json_object(request)
+        if payload is None:
             logger.error("[RADARR WEBHOOK] Invalid JSON in request body")
             return JsonResponse({"status": "error", "message": "Invalid JSON"}, status=400)
 
-
-        event_type = payload.get("eventType", "UNKNOWN").upper()
+        event_type = str(payload.get("eventType") or "UNKNOWN").upper()
         logger.info(f"[RADARR WEBHOOK] eventType: {event_type}")
 
         movie_data = payload.get("movie", {}) or {}
@@ -464,7 +468,7 @@ def radarr_webhook(request: HttpRequest) -> JsonResponse:
 
     except Exception as exc:
         logger.error(f"[RADARR WEBHOOK] Unexpected error: {exc}", exc_info=True)
-        return JsonResponse({"status": "error", "message": str(exc)}, status=500)
+        return JsonResponse({"status": "error", "message": "The webhook could not be processed."}, status=500)
 
 
 @require_http_methods(["GET"])
@@ -529,8 +533,9 @@ def arr_status(request: HttpRequest) -> JsonResponse:
                 "total_webhooks": webhook_count,
             },
         })
-    except Exception as exc:
-        return JsonResponse({"status": "error", "message": str(exc)}, status=500)
+    except Exception:
+        logger.exception("Could not read the ARR status")
+        return JsonResponse({"status": "error", "message": "Could not read the ARR status."}, status=500)
 
 
 @require_http_methods(["POST"])
@@ -563,8 +568,9 @@ def arr_trigger_sync(request: HttpRequest) -> JsonResponse:
         threading.Thread(target=_async_sync, daemon=True).start()
         return JsonResponse({"status": "ok", "message": "Sync triggered in background"})
 
-    except Exception as exc:
-        return JsonResponse({"status": "error", "message": str(exc)}, status=500)
+    except Exception:
+        logger.exception("Could not start the ARR sync")
+        return JsonResponse({"status": "error", "message": "Could not start the sync."}, status=500)
 
 
 @require_http_methods(["POST"])

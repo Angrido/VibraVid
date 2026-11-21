@@ -17,6 +17,7 @@ import django
 
 django.setup()
 
+from datetime import timedelta
 from importlib import import_module
 
 import pytest
@@ -92,6 +93,17 @@ def test_a_download_left_running_by_a_restart_is_reported_as_interrupted():
 
     assert arr_service._reconcile_orphaned_downloads() == 1
     assert ArrMediaRequest.objects.get().failure_reason == "The download was interrupted before it finished."
+
+
+def test_a_long_download_still_running_in_this_process_is_not_reported_as_interrupted():
+    entry = _request("radarr_31", ArrMediaRequest.Status.DOWNLOADING, closed=False)
+    arr_service._mark_downloading(MOVIE)
+    ArrProcessingQueue.objects.filter(pk=entry.pk).update(started_at=timezone.now() - timedelta(hours=5))
+    try:
+        assert arr_service._reconcile_orphaned_downloads(older_than_seconds=7200) == 0
+        assert ArrMediaRequest.objects.get().status == "downloading"
+    finally:
+        arr_service._mark_failed(MOVIE, "download_failed")
 
 
 @pytest.mark.parametrize("status", ["pending", "downloading", "completed", "skipped"])

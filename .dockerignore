@@ -18,3 +18,26 @@ Thumbs.db
 
 README.md
 LICENSE
+
+# Secrets and local state: `COPY . .` would bake them into an image layer
+.env
+.env.*
+*.wvd
+*.prd
+Conf/domains.json
+Conf/domain_overrides.json
+Conf/remote.json
+Conf/migration-*/
+Conf/*.backup
+Conf/*.tmp
+GUI/.django_secret_key
+GUI/db.sqlite3*
+
+# Local development tooling
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.claude/
+.mcp.json
+.agentsroom/

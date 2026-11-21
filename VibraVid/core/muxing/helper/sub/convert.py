@@ -13,9 +13,13 @@ from .sanitize import sanitize_vtt_file
 from .ttml import convert_ttml_to_format
 
 logger = logging.getLogger(__name__)
+_SUPPORTED_TARGET_FORMATS = ("vtt", "srt", "ass")
+_warned_force_values: set[str] = set()
 
 
-def convert_subtitle(subtitle_path: str, target_format: str, chunk_offsets: list[float] | None = None) -> str | None:
+def convert_subtitle(
+    subtitle_path: str, target_format: str, chunk_offsets: list[float] | None = None, media_duration: float | None = None
+) -> str | None:
     """Converts a subtitle file to the target format using FFmpeg.
 
     Args:
@@ -23,10 +27,18 @@ def convert_subtitle(subtitle_path: str, target_format: str, chunk_offsets: list
       - 'auto': detect format and either rename or convert as needed
       - 'copy': leave the file untouched (no conversion or sanitization)
       - 'chunk_offsets': optional list of chunk offsets for TTML conversion (if applicable)
+      - 'media_duration': optional duration (s) of the media, so a late first TTML cue is not rebased to 0
     """
     # no-op when user requests copy
     if target_format == "copy":
         return subtitle_path
+
+    # Any other value was used as a file extension ("on" -> "sub.on") and the subtitle was lost: fall back to auto.
+    if target_format not in ("auto", *_SUPPORTED_TARGET_FORMATS):
+        if target_format not in _warned_force_values:
+            _warned_force_values.add(target_format)
+            logger.warning(f"force_subtitle = {target_format!r} is not supported (use auto, copy, srt, vtt or ass): using auto")
+        target_format = "auto"
 
     if target_format == "auto":
         detected_format = detect_subtitle_format(subtitle_path)
@@ -34,7 +46,7 @@ def convert_subtitle(subtitle_path: str, target_format: str, chunk_offsets: list
         # If it's TTML, we MUST convert it because most players/containers don't support raw TTML
         if detected_format == "ttml":
             output_path = f"{os.path.splitext(subtitle_path)[0]}.srt"
-            if convert_ttml_to_format(subtitle_path, output_path, "srt", chunk_offsets=chunk_offsets):
+            if convert_ttml_to_format(subtitle_path, output_path, "srt", chunk_offsets=chunk_offsets, media_duration=media_duration):
                 return output_path
             return None
 
@@ -50,11 +62,11 @@ def convert_subtitle(subtitle_path: str, target_format: str, chunk_offsets: list
     # Special high-fidelity converter for TTML -> (SRT, VTT)
     if current_format == "ttml":
         if target_format in ["srt", "vtt"]:
-            if convert_ttml_to_format(subtitle_path, output_path, target_format, chunk_offsets=chunk_offsets):
+            if convert_ttml_to_format(subtitle_path, output_path, target_format, chunk_offsets=chunk_offsets, media_duration=media_duration):
                 return output_path
         elif target_format == "ass":
             tmp_srt = f"{os.path.splitext(subtitle_path)[0]}_tmp.srt"
-            if convert_ttml_to_format(subtitle_path, tmp_srt, "srt", chunk_offsets=chunk_offsets):
+            if convert_ttml_to_format(subtitle_path, tmp_srt, "srt", chunk_offsets=chunk_offsets, media_duration=media_duration):
                 res = convert_subtitle(tmp_srt, "ass")
                 try:
                     os.remove(tmp_srt)
@@ -63,6 +75,12 @@ def convert_subtitle(subtitle_path: str, target_format: str, chunk_offsets: list
                 return res
 
         return None
+
+    # Already named for the target (e.g. VTT content in a .srt): ffmpeg cannot write a file onto itself, and a
+    # failed conversion would drop the subtitle, so keep it as it is.
+    if os.path.normcase(os.path.abspath(output_path)) == os.path.normcase(os.path.abspath(subtitle_path)):
+        logger.info(f"convert_subtitle: {os.path.basename(subtitle_path)} already has the .{target_format} extension, keeping it")
+        return subtitle_path
 
     try:
         cmd = [get_ffmpeg_path(), "-v", "error", "-i", subtitle_path, output_path, "-y"]

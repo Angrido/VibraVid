@@ -108,7 +108,7 @@ class WorkerMixin:
                 if ctx.protocol_lower == "hls":
                     _hls_method = _seg_method
                     if _hls_method == "AES-128":
-                        self._decrypt_hls_segment(ctx, fp, seg)
+                        self._decrypt_hls_segment(ctx, fp, seg, skipped=bool(item.get("skipped")))
                         continue
                     if _hls_method == "NONE" and ctx.needs_hls_clear_merge:
                         # Fully unencrypted HLS TS: no decrypt, no init

@@ -72,3 +72,61 @@ async def test_retry_falls_back_to_item_zero_when_selection_unknown(monkeypatch)
 
     assert argv[argv.index("-s") + 1] == "Legacy Entry"
     assert argv[argv.index("--item") + 1] == "0"
+
+
+@pytest.mark.anyio
+async def test_refresh_keeps_the_cursor_on_the_same_entry(monkeypatch):
+    """A new entry on top must not move Retry/Play onto another download."""
+    from VibraVid.core.ui.tracker import download_tracker
+
+    history = [{"id": "old-1", "status": "failed"}, {"id": "old-2", "status": "failed"}]
+    monkeypatch.setattr(download_tracker, "get_history", lambda: list(history))
+
+    class TestApp(App):
+        def on_mount(self):
+            self.push_screen(HistoryScreen())
+
+    app = TestApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        screen.query_one("#history-table", DataTable).move_cursor(row=1)
+        await pilot.pause()
+
+        history.insert(0, {"id": "new", "status": "completed"})
+        screen._refresh_history()
+        await pilot.pause()
+
+        assert screen._get_selected_item()["id"] == "old-2"
+
+
+@pytest.mark.anyio
+async def test_a_repeated_download_id_gets_its_own_row(monkeypatch):
+    """The bare id was the row key: a history with the same id twice raised DuplicateKey."""
+    from VibraVid.core.ui.tracker import download_tracker
+
+    history = [
+        {"id": "dup", "status": "failed", "end_time": 1},
+        {"id": "dup", "status": "completed", "end_time": 2},
+        {"id": "dup", "status": "completed", "end_time": 2},
+    ]
+    monkeypatch.setattr(download_tracker, "get_history", lambda: list(history))
+
+    class TestApp(App):
+        def on_mount(self):
+            self.push_screen(HistoryScreen())
+
+    app = TestApp()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        table = screen.query_one("#history-table", DataTable)
+        assert table.row_count == 3
+        table.move_cursor(row=2)
+        await pilot.pause()
+
+        history.insert(0, {"id": "new", "status": "completed"})
+        screen._refresh_history()
+        await pilot.pause()
+
+        assert screen._get_selected_item() is history[3]

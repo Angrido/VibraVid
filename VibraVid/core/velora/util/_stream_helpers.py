@@ -187,21 +187,25 @@ def describe_key_for_log(value: Any) -> str:
 
 def join_interruptible(
     threads: list[threading.Thread], stop_event: threading.Event, poll: float = 0.25, hard_timeout: float = 7200.0
-) -> None:
+) -> bool:
     """
     Join *threads* in a polling loop so ``KeyboardInterrupt`` is always
     deliverable (unlike a plain ``thread.join()`` with a long timeout).
 
     The loop exits as soon as all threads finish, *stop_event* is set, or
-    *hard_timeout* seconds elapse — whichever comes first.
+    *hard_timeout* seconds elapse — whichever comes first. Returns True only
+    when the deadline expired with threads still running, so the caller can
+    stop them instead of reading their half-written output.
     """
     deadline = time.monotonic() + hard_timeout
     while True:
         alive = [t for t in threads if t.is_alive()]
         if not alive:
-            break
-        if stop_event.is_set() or time.monotonic() >= deadline:
-            break
+            return False
+        if stop_event.is_set():
+            return False
+        if time.monotonic() >= deadline:
+            return True
         for t in alive:
             t.join(timeout=poll)
 
@@ -253,7 +257,7 @@ def print_failed_segments_report(failed_by_stream: list) -> None:
             continue
 
         logger.error(f"Failed segments for {stream_label!r}: {len(failed)} missing")
-        console.print(f"[bold red]Dio Cancaro:[/bold red] [bold white]{stream_label}[/bold white] [red]({len(failed)} missing)[/red]")
+        console.print(f"[bold red]Missing segments:[/bold red] [bold white]{stream_label}[/bold white] [red]({len(failed)} missing)[/red]")
 
 
 class SilentDownloadBarManager(DownloadBarManager):

@@ -347,15 +347,23 @@ class TitleDetailScreen(Screen):
 
     @work(thread=True, exclusive=True, group="seasons")
     def _load_seasons(self) -> None:
+        # `exclusive` cancels the previous worker's task, not its thread: a slow load for a provider
+        # the user already left still returns, so the answer carries the provider it belongs to.
+        site, item = self._site, self._item
         try:
-            seasons = bridge.get_seasons(self._site, self._item)
+            seasons = bridge.get_seasons(site, item)
         except Exception as e:
             logger.exception("season loading failed")
-            self.app.call_from_thread(self._seasons_failed, str(e))
+            self.app.call_from_thread(self._seasons_failed, str(e), site, item)
             return
-        self.app.call_from_thread(self._apply_seasons, seasons or [])
+        self.app.call_from_thread(self._apply_seasons, seasons or [], site, item)
 
-    def _seasons_failed(self, message: str) -> None:
+    def _is_current_provider(self, site: str, item) -> bool:
+        return site == self._current_site and item is self._item
+
+    def _seasons_failed(self, message: str, site: str, item) -> None:
+        if not self._is_current_provider(site, item):
+            return
         # The worker can finish after the user left this screen, while its widgets are being removed.
         try:
             self.query_one("#seasons-loading", LoadingIndicator).display = False
@@ -363,7 +371,9 @@ class TitleDetailScreen(Screen):
         except NoMatches:
             logger.debug("Season loading failed after the detail screen was closed: %s", message)
 
-    def _apply_seasons(self, seasons: list) -> None:
+    def _apply_seasons(self, seasons: list, site: str, item) -> None:
+        if not self._is_current_provider(site, item):
+            return
         # The worker can finish after the user left this screen, while its widgets are being removed.
         try:
             self.query_one("#seasons-loading", LoadingIndicator).display = False

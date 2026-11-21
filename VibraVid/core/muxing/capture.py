@@ -168,7 +168,9 @@ def capture_output(
 
                         # The final summary line uses "Lsize=" instead of "size=" --
                         size_key = "Lsize" if "Lsize" in data else "size"
-                        byte_size = int(re.findall(r"\d+", data.get(size_key, "0"))[0]) * 1000
+                        # "size=N/A" (e.g. while writing to a pipe or before the first packet) has no digits
+                        size_digits = re.findall(r"\d+", data.get(size_key, "0"))
+                        byte_size = int(size_digits[0]) * 1000 if size_digits else 0
 
                         speed = data.get("speed", "N/A")
                         bitrate = data.get("bitrate", "N/A")
@@ -180,7 +182,10 @@ def capture_output(
                             processed_sec = parse_time_scalar(time_processed)
                             if processed_sec is not None and processed_sec > 0:
                                 remaining_sec = total_duration - processed_sec
-                                eta_str = _format_eta(remaining_sec)
+                                # Remaining media time runs at `speed` x real time: divide to get wall time.
+                                speed_match = re.match(r"\s*(\d+(?:\.\d+)?)x", str(speed))
+                                speed_factor = float(speed_match.group(1)) if speed_match else 0.0
+                                eta_str = _format_eta(remaining_sec / speed_factor if speed_factor > 0 else remaining_sec)
 
                         json_data = {
                             "speed": speed,
@@ -278,11 +283,24 @@ def terminate_process(process):
         logger.error(f"Failed to terminate process: {e}")
 
 
+# A fixed 30-minute cap killed long legitimate jobs (a feature-length mux to a slow disk, or a re-encode with
+# param_video, which runs at a fraction of real time). The cap only exists to catch a muxer that hangs, so it
+# scales with the media: a generous floor, or 20x the media duration for anything longer.
+_WAIT_TIMEOUT_FLOOR_SECONDS = 7200.0
+_WAIT_TIMEOUT_PER_MEDIA_SECOND = 20.0
+
+
+def _default_wait_timeout(total_duration: float | None) -> float:
+    if total_duration and total_duration > 0:
+        return max(_WAIT_TIMEOUT_FLOOR_SECONDS, total_duration * _WAIT_TIMEOUT_PER_MEDIA_SECOND)
+    return _WAIT_TIMEOUT_FLOOR_SECONDS
+
+
 def capture_ffmpeg_real_time(
     ffmpeg_command: list,
     description: str,
     total_duration: float | None = None,
-    wait_timeout_seconds: float = 1800.0,
+    wait_timeout_seconds: float | None = None,
     output_path: str | None = None,
 ) -> dict:
     """
@@ -292,10 +310,14 @@ def capture_ffmpeg_real_time(
         ffmpeg_command (list): The command to execute ffmpeg.
         description (str): Description of the command being executed.
         total_duration (Optional[float]): Total video duration in seconds, used to compute ETA.
+        wait_timeout_seconds (Optional[float]): Kill the process after this long; None derives it from total_duration.
 
     Returns:
-        dict: JSON dictionary with the last progress data.
+        dict: JSON dictionary with the last progress data, plus ``exit_code`` and ``timed_out``: callers must check
+        them, a killed or failed process can leave a truncated but non-empty output behind.
     """
+    if wait_timeout_seconds is None:
+        wait_timeout_seconds = _default_wait_timeout(total_duration)
     terminate_flag = threading.Event()
     terminate_flag.clear()
 

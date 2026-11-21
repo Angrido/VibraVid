@@ -16,10 +16,11 @@ Directional navigation:
 import logging
 from collections.abc import Callable
 
+from textual.actions import SkipAction
 from textual.app import App
 from textual.binding import Binding
 from textual.events import Resize
-from textual.screen import Screen
+from textual.screen import ModalScreen, Screen
 from textual.timer import Timer
 
 from VibraVid.core.ui.tracker import download_tracker
@@ -182,6 +183,14 @@ class VibraVidApp(App):
     def action_back(self) -> None:
         """ESC goes one level back, never kills the process."""
         if isinstance(self.screen, HomeScreen):
+            return
+        # A range list with a visual anchor uses Esc to drop the anchor: skipping the binding hands it the key
+        if getattr(self.focused, "anchor_index", None) is not None:
+            raise SkipAction()
+        # This priority binding pre-empts the modals' own Esc; pop_screen() would drop their result
+        # callback (a waiting download would hang until its timeout), so dismiss them as a cancel.
+        if isinstance(self.screen, ModalScreen):
+            self.screen.dismiss(None)
             return
         if len(self.screen_stack) > 1:
             self.pop_screen()

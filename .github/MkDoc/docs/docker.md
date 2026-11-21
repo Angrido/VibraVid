@@ -159,6 +159,13 @@ With the socket mounted, **Update now** drives the host Docker daemon directly: 
     the host). Only enable it together with a GUI login. Without the socket the button tells
     you to update manually.
 
+!!! note "Socket owned by group root"
+    The container joins the socket's group, but never changes its permissions: a bind mount shares
+    the host's file, so making it world-writable would give every local user of the host
+    root-equivalent access to Docker. When the socket belongs to group `root` (gid 0), as on some NAS
+    and on Docker Desktop, the one-click updater cannot use it and the log says so: update manually,
+    or give the socket a dedicated group on the host (for example `docker`).
+
 **Manual update** (always works, socket or not):
 
 ```bash

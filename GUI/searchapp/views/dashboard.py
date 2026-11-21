@@ -87,8 +87,10 @@ def confirm_manual_tracks(request: HttpRequest) -> JsonResponse:
         manual_track_broker.submit(
             payload.get("download_id"), payload.get("token"), payload.get("selected")
         )
-    except (TypeError, ValueError, json.JSONDecodeError, AttributeError, TrackSelectionError) as exc:
+    except TrackSelectionError as exc:  # raised by the broker with a message meant for the user
         return JsonResponse({"status": "error", "message": str(exc)}, status=400)
+    except (TypeError, ValueError, AttributeError):
+        return JsonResponse({"status": "error", "message": "Invalid request body."}, status=400)
     return JsonResponse({"status": "success"})
 
 
@@ -144,8 +146,9 @@ def kill_download(request: HttpRequest) -> JsonResponse:
                     download_tracker.request_stop(job_id)
                 return JsonResponse({"status": "success"})
 
-        except Exception as e:
-            return JsonResponse({"status": "error", "message": str(e)}, status=400)
+        except Exception:
+            logger.exception("Could not stop the download")
+            return JsonResponse({"status": "error", "message": "Could not stop the download."}, status=400)
 
     return JsonResponse({"status": "error", "message": "Method not allowed", "status_code": 405}, status=405)
 
@@ -173,8 +176,10 @@ def remove_queued_download(request: HttpRequest) -> JsonResponse:
 
     try:
         data = json.loads(request.body)
-    except (TypeError, ValueError, json.JSONDecodeError) as error:
-        return JsonResponse({"status": "error", "message": str(error)}, status=400)
+    except (TypeError, ValueError):
+        return JsonResponse({"status": "error", "message": "Invalid request body."}, status=400)
+    if not isinstance(data, dict):  # `[]` or `3` would raise on .get() below
+        return JsonResponse({"status": "error", "message": "Invalid request body."}, status=400)
 
     download_id = str(data.get("download_id") or "").strip()
     if not download_id:
@@ -292,8 +297,9 @@ def kill_and_clear_queue(request: HttpRequest) -> JsonResponse:
 
             return JsonResponse({"status": "success"})
 
-        except Exception as e:
-            return JsonResponse({"status": "error", "message": str(e)}, status=400)
+        except Exception:
+            logger.exception("Could not stop the downloads and clear the queue")
+            return JsonResponse({"status": "error", "message": "Could not stop the downloads."}, status=400)
 
     return JsonResponse({"status": "error", "message": "Method not allowed", "status_code": 405}, status=405)
 
@@ -304,8 +310,9 @@ def clear_download_history(request: HttpRequest) -> JsonResponse:
         try:
             download_tracker.clear_history()
             return JsonResponse({"status": "success"})
-        except Exception as e:
-            return JsonResponse({"status": "error", "message": str(e)}, status=500)
+        except Exception:
+            logger.exception("Could not clear the download history")
+            return JsonResponse({"status": "error", "message": "Could not clear the history."}, status=500)
     return JsonResponse({"status": "error", "message": "Method not allowed"}, status=405)
 
 

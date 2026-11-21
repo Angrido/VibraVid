@@ -129,6 +129,159 @@ def test_series_page_counts_selected_episodes_and_shows_the_season_tray(page, si
     assert page.errors == []
 
 
+def open_series(page, site_name):
+    search_for(page, "orchard", site_name)
+    page.locator("#cn-results .cn-tile").nth(1).get_by_role("button", name="Episodes").click()
+    expect(page.get_by_role("heading", level=1, name="Glass Orchard")).to_be_visible()
+
+
+def test_reloading_the_series_page_does_not_resubmit_the_search_form(page, site_name):
+    open_series(page, site_name)
+    assert re.search(r"/series-detail/\?page=[\w-]+$", page.url)
+    sent = []
+    page.on("request", lambda request: sent.append(request.method) if "/series-detail/" in request.url else None)
+
+    page.reload()
+
+    expect(page.get_by_role("heading", level=1, name="Glass Orchard")).to_be_visible()
+    assert sent == ["GET"]
+    assert page.errors == []
+
+
+def test_an_expired_series_page_returns_to_search_and_says_why(page):
+    page.goto("/series-detail/?page=expired")
+
+    expect(page.get_by_text("This page has expired. Open the title again from the search results.")).to_be_visible()
+
+
+def record_downloads(page, qualities=None):
+    """Answer download form posts and the quality check here; return what the page sent."""
+    seen = {"downloads": 0, "quality_checks": 0}
+
+    def handle(route):
+        request = route.request
+        if request.method == "POST" and "/api/available-qualities/" in request.url:
+            seen["quality_checks"] += 1
+            if qualities is None:
+                route.fulfill(status=503, json={"message": "Provider unavailable right now."})
+            else:
+                route.fulfill(json={"qualities": qualities})
+            return
+        if request.method == "POST" and "download_type=" in (request.post_data or ""):
+            seen["downloads"] += 1
+            route.fulfill(content_type="text/html", body="<!doctype html><title>queued</title><h1>Queued</h1>")
+            return
+        route.fallback()
+
+    page.route("**/*", handle)
+    return seen
+
+
+def test_default_download_skips_the_quality_check(page, site_name):
+    open_series(page, site_name)
+    seen = record_downloads(page)
+    page.locator('.cn-spanel[data-season="1"]').get_by_role("button", name="Whole season").click()
+    expect(page.get_by_role("heading", level=1, name="Queued")).to_be_visible()
+    assert seen == {"downloads": 1, "quality_checks": 0}
+
+
+def test_failed_quality_check_explains_itself_next_to_the_button(page, site_name):
+    open_series(page, site_name)
+    seen = record_downloads(page)
+    page.locator("#cn-series-quality select").select_option("1080p")
+    whole = page.locator('.cn-spanel[data-season="1"]').get_by_role("button", name="Whole season")
+    whole.click()
+    note = page.locator('.cn-spanel[data-season="1"] .cn-msg.is-near')
+    expect(note).to_have_text("Provider unavailable right now.")
+    expect(whole).to_be_enabled()
+    expect(whole).to_have_text("Whole season")  # the label (and any icon) is kept while checking
+    assert seen["downloads"] == 0 and seen["quality_checks"] >= 1
+
+
+def test_download_selected_waits_for_a_selection(page, site_name):
+    open_series(page, site_name)
+    go = page.locator("#cn-go-1")
+    expect(go).to_be_disabled()
+    expect(page.locator("#cn-go-note-1")).to_be_visible()
+    page.locator('.cn-spanel[data-season="1"] .cn-ep').first.click()
+    expect(go).to_be_enabled()
+    expect(page.locator("#cn-go-note-1")).to_be_hidden()
+
+
+def test_hidden_season_tray_is_out_of_the_tab_order(page, site_name):
+    open_series(page, site_name)
+    tray = page.locator("#cn-tray")
+    expect(tray).to_have_attribute("inert", "")
+    pick = page.get_by_role("checkbox", name="Select season 1 for a batch download")
+    pick.check()
+    expect(tray).not_to_have_attribute("inert", "")
+    expect(page.locator("#cn-tray-txt")).to_have_attribute("role", "status")
+    pick.uncheck()
+    expect(tray).to_have_attribute("inert", "")
+
+
+@pytest.mark.parametrize("device", ["desktop"])
+def test_schedule_picker_keeps_focus_and_centres_its_toast(page, site_name):
+    open_series(page, site_name)
+    page.route("**/schedule/add/", lambda route: route.fulfill(json={"success": True}))
+    dots = page.locator('.cn-spanel[data-season="1"] .cn-season-hd').get_by_role("button", name="More options")
+    dots.click()
+    page.get_by_role("menuitem", name="Schedule…").click()
+    dialog = page.get_by_role("dialog")
+    expect(dialog).to_be_visible()
+
+    day = dialog.locator(".cn-sch-days .cn-sch-cell").nth(3)
+    day.focus()
+    page.keyboard.press("Enter")
+    expect(day).to_have_attribute("aria-pressed", "true")
+    expect(day).to_be_focused()
+
+    box = dialog.bounding_box()  # a click on the sheet's own padding must not close it
+    page.mouse.click(box["x"] + 4, box["y"] + box["height"] / 2)
+    expect(dialog).to_be_visible()
+
+    dialog.get_by_role("button", name="Schedule", exact=True).click()
+    expect(dialog).to_be_hidden()
+    expect(dots).to_be_focused()
+    toast = page.locator(".cn-sch-toast")
+    expect(toast).to_contain_text("Scheduled for")
+    page.wait_for_timeout(400)  # let cn-rise finish: the toast must stay centred afterwards
+    toast_box = toast.bounding_box()
+    centre = toast_box["x"] + toast_box["width"] / 2
+    assert abs(centre - 1440 / 2) <= 2, centre
+
+
+def test_stop_all_asks_first_and_returns_focus(page, active_download):
+    stops = []
+    page.route("**/api/stop-all-downloads/", lambda route: (stops.append(1), route.fulfill(json={"status": "success"})))
+    page.goto("/downloads/")
+    stop_all = page.get_by_role("button", name="Stop all downloads")
+    stop_all.click()
+    dialog = page.get_by_role("dialog", name="Stop all downloads?")
+    expect(dialog).to_be_visible()
+    expect(dialog.get_by_role("button", name="Cancel")).to_be_focused()
+    page.keyboard.press("Escape")
+    expect(dialog).to_be_hidden()
+    expect(stop_all).to_be_focused()
+    assert stops == []
+
+    stop_all.click()
+    page.get_by_role("dialog").get_by_role("button", name="Stop all").click()
+    expect(page.get_by_role("dialog")).to_be_hidden()
+    for _ in range(30):
+        if stops:
+            break
+        page.wait_for_timeout(100)
+    assert stops == [1]
+
+
+def test_running_downloads_list_is_not_a_live_region(page, active_download):
+    page.goto("/downloads/")
+    expect(page.locator("#cn-reel-active .cn-ln")).to_have_count(1)
+    expect(page.locator("#cn-reel-active")).not_to_have_attribute("aria-live", re.compile(".*"))
+    expect(page.locator("#cn-dl-announce")).to_have_attribute("role", "status")
+
+
 def test_downloads_page_shows_the_running_download_live(page, active_download):
     page.goto("/downloads/")
     expect(page.locator("#cn-hero-title")).to_have_text("Night Harbor")
@@ -138,6 +291,25 @@ def test_downloads_page_shows_the_running_download_live(page, active_download):
     expect(page.locator("#cn-reel-active .cn-ln")).to_have_count(1)
     expect(page.locator("#cn-nav-active")).to_have_text("1")
     assert page.errors == []
+
+
+def test_progress_fills_slide_with_transform_instead_of_width(page, active_download):
+    # Design contract: only transform/opacity animate. The fill stays full width and slides to --p.
+    page.goto("/downloads/")
+    expect(page.get_by_role("progressbar")).to_have_attribute("aria-valuenow", "42")
+    page.wait_for_timeout(600)  # let the 420ms transform transition settle
+    for selector in ("#cn-hero-bar", "#cn-reel-active .cn-ln-bar i"):
+        fill = page.locator(selector).first
+        bar = fill.evaluate("""node => {
+            const style = getComputedStyle(node);
+            return {inline: node.style.width, p: node.style.getPropertyValue("--p").trim(),
+                    transition: style.transitionProperty, matrix: new DOMMatrix(style.transform).m41,
+                    fill: node.offsetWidth, track: node.parentElement.clientWidth};
+        }""")
+        assert bar["inline"] == "" and bar["p"] == "42%", bar
+        assert "width" not in bar["transition"], bar
+        assert bar["fill"] == bar["track"], bar
+        assert abs(bar["matrix"] - (0.42 - 1) * bar["track"]) < 1, bar
 
 
 def test_downloads_page_explains_an_empty_queue(page):
@@ -196,6 +368,21 @@ def test_login_hides_the_app_until_signed_in(page, monkeypatch):
     page.get_by_role("button", name="Sign in").click()
     expect(page.get_by_role("heading", level=1, name="Watchlist")).to_be_visible()
     assert_no_horizontal_scroll(page)
+
+
+@pytest.mark.parametrize("device", ["desktop"])
+def test_expired_session_sends_page_scripts_to_the_login_page(page, monkeypatch):
+    monkeypatch.setenv("VIBRAVID_USERNAME", "admin")
+    monkeypatch.setenv("VIBRAVID_PASSWORD", "s3cret")
+    page.goto("/downloads/")
+    page.get_by_label("Username").fill("admin")
+    page.get_by_label("Password", exact=True).fill("s3cret")
+    page.get_by_role("button", name="Sign in").click()
+    expect(page.locator("#cn-reel-active")).not_to_have_attribute("aria-busy", "true")
+
+    page.context.clear_cookies()  # the session expires while the page keeps polling
+    expect(page).to_have_url(re.compile(r"/login/\?next=%2Fdownloads%2F$"), timeout=10000)
+    expect(page.get_by_role("heading", name="Sign in")).to_be_visible()
 
 
 def test_reduced_motion_turns_animations_off(open_context, device):

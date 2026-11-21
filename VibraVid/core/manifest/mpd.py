@@ -349,6 +349,22 @@ class DashParser:
     def save_raw(self, directory: Path) -> Path:
         return save_raw_manifest(self.raw_content, directory, "raw.mpd")
 
+    def _period_span(self, periods: list, idx: int, global_duration: float) -> float:
+        """Length of a Period without ``@duration``: up to the next Period's ``@start``, the last one up to the end of
+        the presentation. 0.0 when the starts do not tell (the caller keeps the presentation duration)."""
+        raw_start = periods[idx].get("start")
+        if raw_start is None and idx > 0:
+            return 0.0
+
+        # The first Period of a static MPD starts at 0 even without @start
+        start = self._parse_iso_duration(raw_start or "")
+        if idx + 1 < len(periods):
+            next_start = periods[idx + 1].get("start")
+            span = self._parse_iso_duration(next_start) - start if next_start is not None else 0.0
+        else:
+            span = global_duration - start if global_duration > 0 else 0.0
+        return span if span > 0 else 0.0
+
     def parse_streams(self) -> list[Stream]:
         if self._root is None:
             return []
@@ -384,6 +400,8 @@ class DashParser:
         for period_idx, period in enumerate(all_periods):
             period_base_url = self._resolve_element_base_url(period, self._base_url)
             period_duration = self._parse_iso_duration(period.get("duration", dur_str))
+            if period.get("duration") is None:
+                period_duration = self._period_span(all_periods, period_idx, global_duration) or period_duration
             if not DISABLE_AD_PERIOD_DETECTION and _is_ad_period(
                 period_base_url,
                 period,
@@ -675,33 +693,16 @@ class DashParser:
             if index_range or media_range:
                 logger.debug(f"DASH range-split detected for stream {rep_id!r}: indexRange={index_range!r}, mediaRange={media_range!r}. Live decryption disabled.")
 
-            # Get the media URL
-            rep_base = rep.find("mpd:BaseURL", _NS)
-            if rep_base is not None and rep_base.text:
-                rep_rel = rep_base.text.strip()
-                if rep_base_url.rstrip("/").endswith(rep_rel):
-                    media_url = rep_base_url.rstrip("/")
-                else:
-                    media_url = urljoin(rep_base_url, rep_rel)
-            else:
-                media_url = rep_base_url.rstrip("/")
+            # rep_base_url already has the Representation's own BaseURL resolved: joining it again doubles "./x/" or "../" refs
+            media_url = rep_base_url.rstrip("/")
 
             # Add ONLY the media segment (no explicit byte_range)
             # The downloader will detect single-file media and call _build_dash_ranged_segments()
             # which will split it into chunks automatically
             s.add_segment(Segment(media_url, 0, "media"))
         else:
-            # No segmentation info - single file
-            rep_base = rep.find("mpd:BaseURL", _NS)
-            if rep_base is not None and rep_base.text:
-                rep_rel = rep_base.text.strip()
-                if rep_base_url.rstrip("/").endswith(rep_rel):
-                    media_url = rep_base_url.rstrip("/")
-                else:
-                    media_url = urljoin(rep_base_url, rep_rel)
-                s.add_segment(Segment(media_url, 0, "media"))
-            else:
-                s.add_segment(Segment(rep_base_url.rstrip("/"), 0, "media"))
+            # No segmentation info - single file (rep_base_url already includes the Representation BaseURL)
+            s.add_segment(Segment(rep_base_url.rstrip("/"), 0, "media"))
 
             # Single file without ranges might still work with live decryption if we split it
             # But safer to mark as False unless we know it's segmented
@@ -920,13 +921,10 @@ class DashParser:
 
         base_el = self._root.find("mpd:BaseURL", _NS)
         if base_el is not None and base_el.text and base_el.text.strip():
-            candidate = base_el.text.strip()
-            if candidate.startswith(("http://", "https://", "//")):
-                self._base_url = candidate if candidate.endswith("/") else candidate + "/"
-            else:
-                self._base_url = urljoin(self._base_url, candidate)
-                if not self._base_url.endswith("/"):
-                    self._base_url += "/"
+            # urljoin leaves an absolute URL as is and gives a scheme-relative "//host/" the manifest's scheme
+            self._base_url = urljoin(self._base_url, base_el.text.strip())
+            if not self._base_url.endswith("/"):
+                self._base_url += "/"
 
     @staticmethod
     def _resolve_element_base_url(element, parent_base: str) -> str:
@@ -983,6 +981,19 @@ class DashParser:
         expanded = _SEGMENT_TOKEN_RE.sub(_repl, escaped)
         return expanded.replace("__DASH_DOLLAR__", "$")
 
+    @staticmethod
+    def _open_repeat_count(following, current_time: int, d: int, origin: int, timescale: int, period_duration: float) -> int:
+        """Segments of an S with r < 0 (ISO/IEC 23009-1 5.3.9.6): it repeats up to the next S@t, else to the end of the Period. With no known end (live) only the one listed segment is certain."""
+        if d <= 0:
+            return 1
+        if following and following[0].get("t") is not None:
+            end = int(following[0].get("t"))
+        elif period_duration > 0 and timescale > 0:
+            end = origin + round(period_duration * timescale)
+        else:
+            return 1
+        return max(1, -(-(end - current_time) // d))
+
     def _apply_segment_template(self, tmpl, rep_id, stream, period_start, base_url, period_duration=0.0, tmpl_adapt=None):
         if "/ad/" in base_url.lower():
             logger.info(f"DashParser: segment skipped (ad path) | url={base_url}")
@@ -1014,17 +1025,27 @@ class DashParser:
             current_time = start_time
             ref_is_simple = is_simple_relative_ref(media_tpl)
 
-            for s_el in timeline.findall("mpd:S", _NS):
+            s_elements = timeline.findall("mpd:S", _NS)
+            pto_raw = tmpl.get("presentationTimeOffset", tmpl_adapt.get("presentationTimeOffset") if tmpl_adapt is not None else None)
+            timeline_origin: int | None = int(pto_raw) if pto_raw is not None else None
+            for s_idx, s_el in enumerate(s_elements):
                 t = s_el.get("t")
 
                 if t is not None:
                     current_time = int(t)
+                if timeline_origin is None:
+                    timeline_origin = current_time
 
                 d = int(s_el.get("d", 0))
                 r = int(s_el.get("r", 0))
+                count = r + 1
+                if r < 0:
+                    count = self._open_repeat_count(
+                        s_elements[s_idx + 1:], current_time, d, timeline_origin, timescale, period_duration or stream.duration
+                    )
 
                 seg_dur_s = d / timescale if timescale > 0 else 0.0
-                for _ in range(r + 1):
+                for _ in range(count):
                     seg_url = self._expand_segment_template_tokens(
                         media_tpl,
                         rep_id,

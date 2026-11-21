@@ -78,6 +78,7 @@ class ArrMediaRequest(models.Model):
         "sonarr_unmonitored": "No longer monitored in Sonarr.",
         "radarr_unmonitored": "No longer monitored in Radarr.",
         "interrupted": "The download was interrupted before it finished.",
+        "in_arr_queue": "Already being downloaded by Sonarr/Radarr, so VibraVid left it alone.",
         "download_failed": "The download did not complete. Details are in the logs.",
     }
 

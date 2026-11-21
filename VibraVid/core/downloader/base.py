@@ -184,7 +184,8 @@ class BaseDownloader:
         if not os.path.isdir(directory):
             return False
 
-        pattern = os.path.join(directory, glob.escape(self.filename_base) + f"*.{EXTENSION_OUTPUT}")
+        # Only the '<name> [token]' shape: a bare '*' made 'ep1' match 'ep10.mkv' and skip a download never made
+        pattern = os.path.join(directory, glob.escape(f"{self.filename_base} [") + f"*].{EXTENSION_OUTPUT}")
         return any(os.path.isfile(p) for p in glob.glob(pattern))
 
     @property
@@ -399,11 +400,9 @@ class BaseDownloader:
         """True when the GUI stop button was pressed for this download."""
         return bool(context_tracker.is_gui and self.download_id and download_tracker.is_stopped(self.download_id))
 
-    def _gui_failed_segments(self) -> int:
-        """Number of segments that failed to download (GUI only, else 0)."""
-        if not context_tracker.is_gui:
-            return 0
-        
+    def _failed_segments(self) -> int:
+        """Number of segments that failed to download. CLI and GUI alike: a file with holes must not be muxed and
+        reported as done, and the failure keeps the temp folder a rerun resumes from."""
         md = getattr(self, "media_downloader", None)
         try:
             return int(getattr(md, "had_failed_segments", 0) or 0)
@@ -418,13 +417,18 @@ class BaseDownloader:
         
         if status.get("error") == "cancelled":
             return self._fail("cancelled")
-        
+
+        # Any other error is terminal: a streaming-mux result must not be muxed on top of it
+        if status.get("error"):
+            logger.error(status["error"])
+            return self._fail(str(status["error"]))
+
         if self._no_media_downloaded(status):
             logger.error("No media downloaded")
             return self._fail("No media downloaded")
         
-        if self._gui_failed_segments():
-            n = self._gui_failed_segments()
+        if self._failed_segments():
+            n = self._failed_segments()
             logger.error(f"{n} segment(s) failed to download")
             return self._fail(f"{n} segment(s) failed to download")
         return None
@@ -434,8 +438,8 @@ class BaseDownloader:
         if self._gui_aborted():
             return self._fail("Stopped by user")
         
-        if self._gui_failed_segments():
-            n = self._gui_failed_segments()
+        if self._failed_segments():
+            n = self._failed_segments()
             logger.error(f"{n} segment(s) failed to download")
             return self._fail(f"{n} segment(s) failed to download")
         
@@ -758,6 +762,8 @@ class BaseDownloader:
             self.error = "The video track is much shorter than the audio (its merge was cut short); no file was muxed and the temporary files were kept"
 
         if not self._merge_output_ok(merged_file):
+            # join_media returns "" (and removes its partial output) when the muxer failed: without this the user sees no reason
+            self.error = self.error or "Merge failed: ffmpeg/mkvmerge exited with an error or timed out; temporary files were kept"
             return None
         # Chapters are already baked into merged_file by join_media() above — no separate _inject_chapters() pass needed.
         return self._embed_poster(merged_file)
@@ -930,6 +936,15 @@ class BaseDownloader:
             logger.warning(f"Output verification skipped due to error: {exc}")
             return True
 
+    def _final_file_present(self) -> bool:
+        """The final file exists and is not empty. An audio-only move can fail after output_path already names its destination, and the temp folder then holds the only copy."""
+        path = self.output_path
+        if path and os.path.isfile(path) and os.path.getsize(path) > 0:
+            return True
+        self.error = f"Final file missing or empty: {path}"
+        logger.error(self.error)
+        return False
+
     _MEDIA_PLACEHOLDERS = MEDIA_PLACEHOLDERS
 
     @classmethod
@@ -989,7 +1004,7 @@ class BaseDownloader:
         try:
             self._move_copied_subtitles()
             self._move_copied_audios()
-            verified_ok = self._verify_output()
+            verified_ok = self._verify_output() and self._final_file_present()
             if verified_ok:
                 retag_file(self.output_path)
                 Sidecars.write_for(self.output_path, getattr(self, "_sidecar_target", None))

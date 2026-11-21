@@ -49,6 +49,8 @@ class FakeDrm:
 
 
 class FakeDownloader(VodStreamMixin):
+    _video_task_key = "video"
+
     def __init__(self, max_segments=None, key=None, refresh_fn=None):
         self.max_time = None
         self.max_segments = max_segments
@@ -58,6 +60,10 @@ class FakeDownloader(VodStreamMixin):
         self.generic_calls: list[dict] = []
         self.skipped: list[tuple] = []
         self.key_trials: list[tuple] = []
+        self.done: list[tuple] = []
+
+    def _record_track_done(self, task_key, out_path):
+        self.done.append((task_key, out_path))
 
     def _build_headers(self):
         return {"X-H": "1"}
@@ -356,3 +362,18 @@ def test_ism_without_segments_does_nothing():
     dl = FakeDownloader()
     dl._download_ism_stream(Stream(type="video", format="ism"), None)
     assert dl.generic_calls == []
+
+
+# ---- Nothing to download still ends the track ----------------------------------------------------------------------
+
+
+def test_every_early_return_reports_the_track_as_done(hls_net, monkeypatch):
+    """The streaming mux waits on every selected track: one that returns without a result must still say it is done."""
+    dl = FakeDownloader()
+    dl._download_hls_stream(Stream(type="video", format="hls"), None)
+    dl._download_dash_stream(Stream(type="video", format="dash"), None)
+    dl._download_ism_stream(Stream(type="video", format="ism"), None)
+    monkeypatch.setattr(_stream_vod, "get_with_retry", lambda c, url: SimpleNamespace(text="#EXTM3U\n#EXT-X-ENDLIST\n"))
+    dl._download_hls_stream(_hls_stream(), None)
+
+    assert dl.done == [("video", None)] * 4

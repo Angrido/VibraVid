@@ -228,3 +228,38 @@ async def test_provider_pills_pool_grows_and_reuses():
         assert screen.query_one("#preview-providers-box").display is False
         assert not any(p.display for p in screen._provider_pills())
         assert len(list(screen.query("#preview-providers-wrap > Button").results(Button))) == 5
+
+
+@pytest.mark.anyio
+async def test_retry_failed_sites_searches_only_those_sites_and_merges(monkeypatch):
+    from textual.app import App
+
+    from VibraVid.tui import bridge
+
+    screen = SearchScreen(site=None, initial_query="")
+    calls = []
+
+    def fake_search_global(query, sites=None, **kwargs):
+        calls.append((query, sites))
+        return {"site2": [MockItem("Retried", 2020)]}, {}
+
+    monkeypatch.setattr(bridge, "search_global", fake_search_global, raising=False)
+
+    class TestApp(App):
+        def compose(self):
+            yield screen
+
+    app = TestApp()
+    async with app.run_test() as pilot:
+        screen._last_query = "retried"
+        screen._apply_results([("site1", MockItem("Kept", 2021))], {"site2": "timeout"}, None)
+        await pilot.pause()
+        assert screen._failed_sites == ["site2"]
+
+        screen.action_retry_failed_sites()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        assert calls == [("retried", ["site2"])]
+        assert sorted(r[1].name for r in screen._raw) == ["Kept", "Retried"]
+        assert screen._failed_sites == []

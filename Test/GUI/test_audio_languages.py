@@ -63,6 +63,35 @@ def test_full_series_batch_excludes_seasons_without_requested_language(monkeypat
     assert context_tracker.audio_filter is None
 
 
+def _post_selected_seasons(monkeypatch, api, audio_language):
+    calls = []
+    monkeypatch.setattr(_shared, "get_api", lambda site: api)
+    monkeypatch.setattr(_shared, "_run_download_in_thread", lambda *args, **kwargs: calls.append(kwargs) or (lambda: None))
+    monkeypatch.setattr(_shared, "_submit_download_task", lambda worker: None)
+    request = RequestFactory().post("/series-detail/", {
+        "source_alias": "streamingcommunity", "item_payload": json.dumps({"name": "Grey's Anatomy", "type": "tv"}),
+        "download_type": "selected_seasons", "selected_seasons": "22,23", "audio_language": audio_language,
+    })
+    request._messages = Mock()
+    with _config():
+        _shared._handle_series_download(request)
+    return [call["season"] for call in calls], request._messages
+
+
+def test_selected_seasons_are_queued_when_the_season_lookup_fails(monkeypatch):
+    """With the default "auto" audio, a failed lookup emptied the selection and answered with an audio-language warning."""
+    def _down(item):
+        raise ConnectionError("provider unreachable")
+
+    seasons, _messages = _post_selected_seasons(monkeypatch, SimpleNamespace(get_series_metadata=_down), "auto")
+    assert seasons == ["22", "23"]
+
+
+def test_selected_seasons_still_follow_a_requested_language(monkeypatch):
+    seasons, _messages = _post_selected_seasons(monkeypatch, SimpleNamespace(get_series_metadata=lambda item: fixture_seasons()), "it")
+    assert seasons == ["22"]
+
+
 def test_movie_download_receives_selected_audio(monkeypatch):
     calls = []
     monkeypatch.setattr(download_module, "_run_download_in_thread", lambda *args, **kwargs: calls.append(kwargs))

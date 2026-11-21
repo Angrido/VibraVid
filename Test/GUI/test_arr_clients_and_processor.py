@@ -120,6 +120,22 @@ def test_gives_up_after_max_retries(client, arr):
     assert len(arr.calls) == 3
 
 
+def test_only_a_404_means_the_title_was_removed(arr):
+    """Any failure used to mean "removed", and the finished download was discarded when Sonarr/Radarr restarted."""
+    sonarr = sonarr_client.SonarrClient(arr.url, API_KEY, timeout=5, max_retries=1)
+    radarr = radarr_client.RadarrClient(arr.url, API_KEY, timeout=5, max_retries=1)
+    arr.routes["/api/v3/series/1"] = {"id": 1}
+    arr.routes["/api/v3/movie/1"] = {"id": 1}
+
+    assert sonarr.series_exists(1) and radarr.movie_exists(1)
+    assert not sonarr.series_exists(2) and not radarr.movie_exists(2)
+
+    arr.fail_first = 2
+    assert sonarr.series_exists(2) and radarr.movie_exists(2)  # 500: unknown, keep going
+    assert sonarr_client.SonarrClient(arr.url, "bad-key", timeout=5).series_exists(2)  # 401: unknown too
+    assert sonarr_client.SonarrClient("http://127.0.0.1:9/", API_KEY, timeout=2).series_exists(1)  # unreachable
+
+
 def test_get_all_missing_walks_every_page_until_it_is_empty(client, arr):
     pages = {"1": [{"id": 1}, {"id": 2}], "2": [{"id": 3}], "3": []}
     arr.routes["/api/v3/wanted/missing"] = lambda query: {"records": pages[query["page"][0]]}
@@ -344,3 +360,139 @@ def test_a_failing_client_does_not_hide_the_other_one():
 
 def test_missing_clients_are_skipped():
     assert ArrProcessorService(None, None).get_missing_items() == []
+
+
+# --- the same tag rules on every webhook ------------------------------------------------------------------------------------
+from searchapp.arr import arr_service
+
+SHOW = {"id": 1, "title": "Show", "path": "/tv/show", "tmdbId": 1001, "monitored": True}
+FILM = {"id": 9, "title": "Film", "path": "/m/film", "tmdbId": 55, "monitored": True}
+
+
+class FakeArr:
+    """Sonarr and Radarr as the webhook syncs read them."""
+
+    def __init__(self, tags=None, item_tags=(), episodes=(), has_file=False):
+        self._tags, self._item_tags, self._episodes, self._has_file = tags or {}, list(item_tags), list(episodes), has_file
+
+    def get_tags_map(self):
+        return self._tags
+
+    def get_series_by_id(self, _id):
+        return {**SHOW, "tags": self._item_tags}
+
+    def get_series(self):
+        return [self.get_series_by_id(1)]
+
+    def get_episodes_for_series(self, _id):
+        return self._episodes
+
+    def get_movie_by_id(self, _id):
+        return {**FILM, "tags": self._item_tags, "hasFile": self._has_file}
+
+    def get_movies(self):
+        return [self.get_movie_by_id(9)]
+
+
+def _ep(season, number, has_file=False):
+    return {"id": season * 100 + number, "seasonNumber": season, "episodeNumber": number, "hasFile": has_file,
+            "monitored": True, "airDateUtc": "2020-01-01T00:00:00Z"}
+
+
+def _webhook_env(monkeypatch, sonarr=None, radarr=None, **cfg):
+    """Run a webhook sync up to the queue: returns what it would download, as (arr id, season, episode)."""
+    config = {"enabled": True, "tags_mode": "BLACKLIST", "active_tag_ids": [], **cfg}
+    monkeypatch.setattr(arr_service, "_load_arr_config", lambda: config)
+    monkeypatch.setattr(arr_service, "_build_clients", lambda _cfg: (sonarr, radarr))
+    monkeypatch.setattr(arr_service, "_reconcile_unmonitored_pending", lambda **_k: 0)
+    monkeypatch.setattr(arr_service, "_should_skip_seerr_event", lambda *_a: False)
+    monkeypatch.setattr(arr_service, "_skip_unmonitored_episode", lambda *_a: False)
+    monkeypatch.setattr(arr_service, "_skip_unmonitored_movie", lambda *_a: False)
+    monkeypatch.setattr(arr_service, "trigger_polling_sync", lambda **_k: 0)
+    queued = []
+
+    def enqueue(item, _source, season_num=None, ep_num=None, episode_id=None):
+        queued.append((item["id"], season_num, ep_num))
+        return False  # stop before any download
+
+    monkeypatch.setattr(arr_service, "_enqueue_if_new", enqueue)
+    return queued
+
+
+def _sonarr_event(event, episodes=()):
+    return {"eventType": event, "series": {"id": 1, "title": "Show", "tmdbId": 1001}, "episodes": list(episodes)}
+
+
+@pytest.mark.parametrize("event", ["SeriesAdd", "Download", "Grab", "EpisodeFileDelete"])
+def test_a_series_on_hold_is_not_downloaded_by_a_sonarr_webhook(monkeypatch, event):
+    sonarr = FakeArr({5: "hold"}, [5], [_ep(1, 1)])
+    queued = _webhook_env(monkeypatch, sonarr=sonarr)
+
+    arr_service.trigger_sonarr_webhook_sync(_sonarr_event(event, [_ep(1, 1)]))
+
+    assert queued == []
+
+
+@pytest.mark.parametrize("event", ["SeriesAdd", "Download", "EpisodeFileDelete"])
+def test_sonarr_webhooks_skip_specials_and_skip_tagged_seasons(monkeypatch, event):
+    episodes = [_ep(0, 1), _ep(1, 1), _ep(2, 1)]
+    sonarr = FakeArr({7: "skip-s1"}, [7], episodes)
+    queued = _webhook_env(monkeypatch, sonarr=sonarr)
+
+    arr_service.trigger_sonarr_webhook_sync(_sonarr_event(event, episodes))
+
+    assert queued == [(1, 2, 1)]
+
+
+def test_a_series_on_hold_is_not_downloaded_on_a_seerr_approval(monkeypatch):
+    queued = _webhook_env(monkeypatch, sonarr=FakeArr({5: "pausa"}, [5], [_ep(1, 1)]))
+
+    arr_service.trigger_webhook_sync({"media": {"media_type": "tv", "tmdbId": 1001}})
+
+    assert queued == []
+
+
+def test_a_seerr_movie_without_the_whitelisted_tag_is_not_downloaded(monkeypatch):
+    queued = _webhook_env(monkeypatch, radarr=FakeArr({1: "4k"}, []), tags_mode="WHITELIST", active_tag_ids=[1])
+
+    arr_service.trigger_webhook_sync({"media": {"media_type": "movie", "tmdbId": 55}})
+
+    assert queued == []
+
+
+@pytest.mark.parametrize("hold_tag", ["hold", "pausa"])
+def test_a_movie_on_hold_is_not_downloaded_by_a_radarr_webhook(monkeypatch, hold_tag):
+    queued = _webhook_env(monkeypatch, radarr=FakeArr({5: hold_tag}, [5]))
+
+    arr_service.trigger_radarr_webhook_sync({"eventType": "MovieAdded", "movie": {"id": 9}})
+
+    assert queued == []
+
+
+# --- webhooks never download a title that already has a file -----------------------------------------------------------------
+@pytest.mark.parametrize("event", ["Download", "Grab"])
+def test_sonarr_download_and_grab_skip_episodes_that_already_have_a_file(monkeypatch, event):
+    sonarr = FakeArr(episodes=[_ep(1, 1, has_file=True), _ep(1, 2)])
+    queued = _webhook_env(monkeypatch, sonarr=sonarr)
+
+    arr_service.trigger_sonarr_webhook_sync(_sonarr_event(event, [_ep(1, 1), _ep(1, 2)]))
+
+    assert queued == [(1, 1, 2)]
+
+
+def test_episode_file_delete_queues_the_episodes_left_without_a_file(monkeypatch):
+    sonarr = FakeArr(episodes=[_ep(1, 1, has_file=True), _ep(1, 2)])
+    queued = _webhook_env(monkeypatch, sonarr=sonarr)
+
+    arr_service.trigger_sonarr_webhook_sync(_sonarr_event("EpisodeFileDelete", [_ep(1, 2)]))
+
+    assert queued == [(1, 1, 2)]
+
+
+@pytest.mark.parametrize("has_file, expected", [(True, []), (False, [(9, None, None)])])
+def test_radarr_webhook_downloads_a_movie_only_when_it_has_no_file(monkeypatch, has_file, expected):
+    queued = _webhook_env(monkeypatch, radarr=FakeArr(has_file=has_file))
+
+    arr_service.trigger_radarr_webhook_sync({"eventType": "Download", "movie": {"id": 9}})
+
+    assert queued == expected

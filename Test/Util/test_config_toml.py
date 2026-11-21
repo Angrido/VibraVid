@@ -200,6 +200,54 @@ def test_save_config_keeps_comments_and_only_changes_what_changed(conf):
     assert not list(tmp_path.glob("*.tmp"))
 
 
+def test_save_config_keeps_the_file_value_of_environment_and_session_values(conf, monkeypatch):
+    """VIBRAVID_OUTPUT_ROOT and a CLI session flag hold for this process only: saving any other setting used to write them too."""
+    tmp_path, manager = conf
+    monkeypatch.setenv("VIBRAVID_OUTPUT_ROOT", "/app/Video")
+    manager._load_config()
+    manager.set_session_value("DOWNLOAD", "select_audio", "eng")
+    assert manager.config.get("OUTPUT", "root_path") == "/app/Video"
+    assert manager.config.get("DOWNLOAD", "select_audio") == "eng"
+
+    manager.config.set_key("DOWNLOAD", "thread_count", 4)
+    manager.save_config()
+
+    saved = tomllib.loads(_read(tmp_path / "config.toml"))
+    assert saved["DOWNLOAD"]["select_audio"] == "ita|eng"
+    assert saved["DOWNLOAD"]["thread_count"] == 4
+    assert "OUTPUT" not in saved  # the file had no such section
+
+
+def test_a_value_changed_after_the_override_is_saved(conf, monkeypatch):
+    tmp_path, manager = conf
+    monkeypatch.setenv("VIBRAVID_OUTPUT_ROOT", "/app/Video")
+    manager._load_config()
+
+    manager.config.set_key("OUTPUT", "root_path", "/mnt/media")  # chosen by the user, e.g. in the TUI settings
+    manager.save_config()
+
+    assert tomllib.loads(_read(tmp_path / "config.toml"))["OUTPUT"]["root_path"] == "/mnt/media"
+
+
+def test_cli_flags_save_only_the_persistent_ones(conf, monkeypatch):
+    from types import SimpleNamespace
+
+    from VibraVid.cli import run
+
+    tmp_path, manager = conf
+    manager._load_config()
+    monkeypatch.setattr(run, "config_manager", manager)
+
+    run.apply_config_updates(SimpleNamespace(audio="eng", video="720p", extension="mp4"))
+
+    saved = tomllib.loads(_read(tmp_path / "config.toml"))
+    assert saved["PROCESS"]["extension"] == "mp4"
+    assert saved["DOWNLOAD"]["select_audio"] == "ita|eng"
+    assert "select_video" not in saved["DOWNLOAD"]
+    assert manager.config.get("DOWNLOAD", "select_audio") == "eng"  # still applied to this run
+    assert manager.config.get("DOWNLOAD", "select_video") == "720p"
+
+
 def test_save_login_drops_removed_keys_and_ignores_none(conf):
     tmp_path, manager = conf
     manager._load_login()

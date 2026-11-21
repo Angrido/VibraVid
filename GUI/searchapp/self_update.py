@@ -299,6 +299,13 @@ def _update_source() -> dict:
         return {"success": False, "message": f"git pull failed: {exc}"}
 
     logger.info("Source update: %s", (out.stdout or "").strip())
+    # Whichever process serves the new code (the autoreloader's child, or the re-exec below), manage.py migrates
+    # first when this marker exists: a release with a new migration would otherwise run on the old schema.
+    try:
+        with open(os.path.join(repo, "GUI", ".migrate-pending"), "w", encoding="utf-8"):
+            pass
+    except OSError as exc:
+        logger.warning(f"Could not leave the migrate marker ({exc}): restart VibraVid by hand if pages fail")
     threading.Thread(target=_delayed_reexec, daemon=True).start()
     return {"success": True, "message": "Code updated; restarting the process."}
 

@@ -38,8 +38,8 @@ def _get_interval_seconds() -> int:
 
 def set_interval_seconds(value: int) -> None:
     from VibraVid.utils import config_manager
-    config_manager.config.set_key("DEFAULT", "watchlist_interval_seconds", value)
-    config_manager.save_config()
+    # Only this key, merged into the file on disk; raises OSError when the file cannot be written.
+    config_manager.patch_file("config", {"DEFAULT": {"watchlist_interval_seconds": value}})
     _interval_changed.set()
 
 

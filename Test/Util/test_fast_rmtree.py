@@ -76,6 +76,19 @@ def test_fast_rmtree_deletes_with_a_unc_working_directory(tmp_path, monkeypatch)
     assert _wait_until_gone(next(os.path.join(unc, p) for p in os.listdir(unc) if p.startswith("hls_temp.trash-")))
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="cmd.exe parsing is a Windows thing")
+def test_fast_rmtree_folder_name_with_cmd_metacharacters(tmp_path):
+    """`&` in a title-derived folder without spaces split the detached `rd` in two: the sibling `Tom` went, the trash stayed."""
+    sibling = _make_dir_with_files(str(tmp_path), "Tom", count=1)
+    d = _make_dir_with_files(str(tmp_path), "Tom&Jerry", count=3)
+
+    os_manager.fast_rmtree(d)
+
+    trash = next(os.path.join(str(tmp_path), p) for p in os.listdir(tmp_path) if p.startswith("Tom&Jerry.trash-"))
+    assert _wait_until_gone(trash)
+    assert os.path.isdir(sibling)
+
+
 def _make_readonly_file(base_dir, name):
     import stat
 

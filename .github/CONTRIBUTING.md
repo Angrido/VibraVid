@@ -47,6 +47,25 @@ the full walkthrough.
 - Write the PR description around the *why*: what problem this solves or
   what behavior changes, not just a restatement of the diff.
 
+## Working with AI coding agents
+
+The `AGENTS.md` files (repository root, `GUI/`, `VibraVid/services/`) are the guide every agent reads: map,
+commands, conventions, files never to touch. Update them when a convention changes.
+
+Recommended Claude Code plugins (install once; they apply to every project of your user):
+
+| Plugin | What it brings here | Install |
+|---|---|---|
+| `ponytail` | Smallest complete change, reuse before writing; `/ponytail-review` and `/ponytail-audit` | `claude plugin marketplace add DietrichGebert/ponytail`, then `claude plugin install ponytail@ponytail` |
+| `superpowers` | TDD, systematic debugging, plans, a code-review agent | `claude plugin install superpowers@claude-plugins-official` |
+| `pyright-lsp` | Type errors and go-to-definition on the Python code (reads `pyrightconfig.json`) | `npm install -g pyright`, then `claude plugin install pyright-lsp@claude-plugins-official` |
+| `context7` | Current docs for Django 5.2, Textual, curl_cffi, ... instead of the model's memory | `claude plugin install context7@claude-plugins-official`, then authenticate once with `/mcp` |
+| `frontend-design` | GUI work, together with `design-system/MASTER.md` | `claude plugin install frontend-design@claude-plugins-official` |
+
+- Keep a single copy of each plugin: two versions of `superpowers` load every skill twice.
+- `security-guidance` is worth a dedicated security pass, but it reviews the diff with an LLM after every turn.
+  In a checkout shared by several agents, set `ENABLE_STOP_REVIEW=0` so it reviews commits only.
+
 ## Versioning
 
 Every push to `main` bumps the version in `VibraVid/utils/upload/version.py`

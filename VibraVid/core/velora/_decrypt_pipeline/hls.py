@@ -15,16 +15,17 @@ if TYPE_CHECKING:
 
 
 class HlsDecryptMixin:
-    def _decrypt_hls_segment(self, ctx: "_SegmentDownloadContext", fp: Path, seg: dict[str, Any]) -> None:
+    def _decrypt_hls_segment(self, ctx: "_SegmentDownloadContext", fp: Path, seg: dict[str, Any], skipped: bool = False) -> None:
         enc = seg.get("enc") or {}
         method = str(enc.get("method") or "NONE").upper()
         if method != "AES-128":
             return
 
-        if _reads_as_plaintext_ts(fp):
+        if skipped and _reads_as_plaintext_ts(fp):
             # A "skipped" download event (segment already on disk from a
             # previous, interrupted run) still reaches here -- if it was
             # already decrypted, decrypting it again would corrupt it.
+            # A freshly downloaded segment is always ciphertext: never sniff it.
             logger.debug(f"HLS AES-128: {fp.name} already looks decrypted, skipping")
             if ctx.live_merger is not None:
                 ctx.live_merger.submit(seg.get("number"), fp)

@@ -45,7 +45,7 @@ Real images work in Windows Terminal 1.22+, WezTerm, kitty and iTerm2, and in VS
 | `F1` / `H` | **Home** | Category cards (Film, Series, Anime, Music) and site filter |
 | `F2` | **Search** | Global search, deduplicated results, metadata preview |
 | `F3` / `d` | **Downloads** | Live progress table, track inspector, completed downloads |
-| `F4` / `q` | **Batch Queue** | Enqueue jobs, retry failed items, manage CLI batch commands |
+| `F4` / `q` | **Batch Queue** | Enqueue jobs, retry failed items, manage CLI batch commands; **Clear Completed** removes the `done` items (pending, running and failed ones stay) |
 | `F5` / `h` | **Download History** | Completed downloads, output path, re-queue |
 | `F6` / `,` | **Settings & Services** | `config.toml` sections and, below them, every service of `login.toml` with `✓` (a credential is set) or `·` (not set up yet), each field with a note on what it does; `Ctrl+S` saves the open page |
 | `F7` / `s` | **System & DRM** | Binary checker, CDM device status, logs (`r` refreshes) |
@@ -61,7 +61,7 @@ Real images work in Windows Terminal 1.22+, WezTerm, kitty and iTerm2, and in VS
 | `Space` | Title Detail | Toggle episode |
 | `a` / `u` | Title Detail | Select all / clear episodes of the season |
 | `r` | Title Detail | Range-selection modal |
-| `v` | Title Detail | Toggle visual range anchor |
+| `v` | Title Detail | Toggle visual range anchor (`ESC` clears it before going back) |
 | `i` | Title Detail | Invert selection |
 
 ![VibraVid TUI Title Detail Screen](assets/tui/tui_detail.png)

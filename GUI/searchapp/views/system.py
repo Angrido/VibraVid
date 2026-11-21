@@ -98,9 +98,9 @@ def site_cli_options_schema(request: HttpRequest) -> JsonResponse:
     try:
         args = get_site_extra_args_schema(site)
         login = get_site_login_status(site)
-    except Exception as exc:
+    except Exception:
         logger.exception("Failed to load CLI options schema for site '%s'", site)
-        return JsonResponse({"error": str(exc)}, status=500)
+        return JsonResponse({"error": "Could not load the options for this site."}, status=500)
 
     return JsonResponse({"args": args, "login": login})
 
@@ -129,11 +129,9 @@ def reload_config(request: HttpRequest) -> JsonResponse:
             "success": True,
             "message": message
         })
-    except Exception as e:
-        return JsonResponse({
-            "success": False,
-            "error": f"Errore nel reload: {str(e)}"
-        }, status=500)
+    except Exception:
+        logger.exception("Config reload failed")
+        return JsonResponse({"success": False, "error": "Errore nel reload: dettagli nei log."}, status=500)
 
 
 @require_http_methods(["GET"])
@@ -160,7 +158,7 @@ def check_updates(request: HttpRequest) -> JsonResponse:
         html_url = data.get("html_url", "")
     except Exception as exc:
         logger.warning(f"Update check failed: {exc}")
-        return JsonResponse({"error": str(exc)}, status=502)
+        return JsonResponse({"error": "Could not check for updates."}, status=502)
 
     def _ver_tuple(v):
         try:
@@ -187,9 +185,9 @@ def trigger_binaries_update(request: HttpRequest) -> JsonResponse:
 
     try:
         result = check_all_binaries_update()
-    except Exception as exc:
+    except Exception:
         logger.exception("Binaries update failed")
-        return JsonResponse({"success": False, "message": str(exc)}, status=500)
+        return JsonResponse({"success": False, "message": "Could not update the binaries. Open the logs for details."}, status=500)
 
     return JsonResponse({"success": True, "results": result})
 
@@ -214,9 +212,9 @@ def refresh_external_import(request: HttpRequest) -> JsonResponse:
         if any(r["updated"] for r in results):
             for err in _reload_service_registries([]):
                 logger.warning("imp_service reload: %s", err)
-    except Exception as exc:
+    except Exception:
         logger.exception("External import refresh failed")
-        return JsonResponse({"success": False, "message": str(exc)}, status=500)
+        return JsonResponse({"success": False, "message": "Could not refresh the external services. Open the logs for details."}, status=500)
 
     return JsonResponse({"success": True, "results": results})
 
@@ -228,9 +226,9 @@ def trigger_update(request: HttpRequest) -> JsonResponse:
 
     try:
         result = perform_update()
-    except Exception as exc:
+    except Exception:
         logger.exception("Self-update failed")
-        return JsonResponse({"success": False, "message": str(exc)}, status=500)
+        return JsonResponse({"success": False, "message": "The update failed. Open the logs for details."}, status=500)
 
     return JsonResponse(result)
 

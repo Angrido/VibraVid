@@ -99,6 +99,7 @@ class FuzzyList(Widget):
         self._placeholder = placeholder
         self._last_click_time: float = 0.0
         self._last_click_key: str | None = None
+        self._last_highlighted: tuple[str, Any] | None = None
 
     def compose(self) -> ComposeResult:
         yield Input(placeholder=self._placeholder, id="fuzzy-input")
@@ -153,16 +154,18 @@ class FuzzyList(Widget):
 
     async def _refresh_list(self, items: list[FuzzyItem]) -> None:
         lv = self.query_one("#fuzzy-list", ListView)
+        # The list is rebuilt on every finished site, Space toggle and enqueue: keep the highlight
+        # on the same title, otherwise Enter/d would act on whatever landed on row 0.
+        previous = self.get_highlighted_item()
         await lv.clear()
         for it in items:
             li = HoverListItem(Static(it.label))
             li.fuzzy_payload = it
             lv.append(li)
         if len(lv) > 0:
-            lv.index = 0
-            first = getattr(lv.children[0], "fuzzy_payload", None)
-            if first:
-                self.post_message(self.Highlighted(first, self))
+            keys = [it.key for it in items]
+            # Setting the index fires ListView.Highlighted; _highlighted forwards it only if the item changed.
+            lv.index = keys.index(previous.key) if previous is not None and previous.key in keys else 0
 
     @on(Input.Changed, "#fuzzy-input")
     async def _filter(self, event: Input.Changed) -> None:
@@ -199,7 +202,10 @@ class FuzzyList(Widget):
     def _highlighted(self, event: ListView.Highlighted) -> None:
         if event.item is not None:
             item = getattr(event.item, "fuzzy_payload", None)
-            if item is not None:
+            # The label changes with badges (Space toggle, library status) without being another
+            # title; re-posting would reset the screen's provider pick for nothing.
+            if item is not None and (item.key, item.payload) != self._last_highlighted:
+                self._last_highlighted = (item.key, item.payload)
                 self.post_message(self.Highlighted(item, self))
 
     @on(events.Click, "ListItem")

@@ -631,7 +631,12 @@ def _matches_codec(s, token: str) -> bool:
     stream_type = getattr(s, "type", "")
     wanted = {normalized_token, get_codec_token(normalized_token, stream_type).lower()}
     names = {raw, get_codec_token(raw, stream_type).lower()}
-    return any(name.startswith(want) or want in name for want in wanted for name in names)
+    if any(name.startswith(want) or want in name for want in wanted for name in names):
+        return True
+
+    # "H265" maps to "hvc1" and "H264" to "avc1": a "hev1.*" / "avc3.*" stream is the same codec in another sample entry
+    wanted_families = {_codec_family(want) for want in wanted} - {""}
+    return _codec_family(raw) in wanted_families
 
 
 def _strip_lang_flag_affixes(tag: str) -> str:

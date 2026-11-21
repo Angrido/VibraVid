@@ -250,7 +250,7 @@ class VodStreamMixin:
             return f"sub_{lang.split('-')[0]}{self._sub_discriminator(stream)}"
 
         lang = (stream.resolved_language or stream.language or "und").lower()
-        return f"aud_{lang.split('-')[0]}"
+        return f"aud_{lang.split('-')[0]}{self._audio_suffix(stream)}"
 
     def _make_stream_dir(self, stream, protocol: str) -> Path:
         if stream.type == "video":
@@ -261,7 +261,7 @@ class VodStreamMixin:
             lang = safe_name((stream.language or "und").lower())
             name = f"s_{lang}{self._sub_discriminator(stream)}"
         else:
-            name = f"a_{safe_name((stream.language or 'und').lower())}"
+            name = f"a_{safe_name((stream.language or 'und').lower())}{self._audio_suffix(stream)}"
 
         d = self._tmp_dir / name
         d.mkdir(parents=True, exist_ok=True)
@@ -690,6 +690,8 @@ class VodStreamMixin:
         playlist_url = stream.playlist_url
         if not playlist_url:
             logger.error(f"HLS stream has no playlist_url: {stream}")
+            # The streaming mux waits on every selected track: close this one (row + done signal) too
+            self._report_stream_error(stream, bar_manager, RuntimeError("no playlist URL"))
             return
 
         all_headers = self._build_headers()
@@ -755,6 +757,7 @@ class VodStreamMixin:
 
         if not media_segs and not init_url:
             logger.error(f"HLS variant playlist has no segments: {playlist_url}")
+            self._report_stream_error(stream, bar_manager, RuntimeError("no segments"))
             return
 
         total_dur = sum(seg.get("duration", 0.0) for seg in media_segs)
@@ -810,6 +813,7 @@ class VodStreamMixin:
     def _download_dash_stream(self, stream, bar_manager: DownloadBarManager, live_decryption: bool = False) -> None:
         if not stream.segments:
             logger.error(f"DASH stream has no segments: {stream}")
+            self._report_stream_error(stream, bar_manager, RuntimeError("no segments"))
             return
 
         # Multi-period tracks (same representation id spread across Periods that use
@@ -983,6 +987,7 @@ class VodStreamMixin:
     def _download_ism_stream(self, stream, bar_manager: DownloadBarManager, live_decryption: bool = False) -> None:
         if not stream.segments:
             logger.error(f"ISM stream has no segments: {stream}")
+            self._report_stream_error(stream, bar_manager, RuntimeError("no segments"))
             return
 
         all_headers = self._build_headers()

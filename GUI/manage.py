@@ -9,13 +9,19 @@ parent_dir = os.path.dirname(current_dir)
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
+# Left by the in-app source update (searchapp/self_update.py): the process that serves the new code is a reloader
+# child (RUN_MAIN=true), which would otherwise skip the migrate below and run on the old schema.
+MIGRATE_MARKER = os.path.join(current_dir, ".migrate-pending")
+
 
 def main():
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "webgui.settings")
 
     is_server = len(sys.argv) > 1 and sys.argv[1] in {"runserver", "runserver_plus"}
-    if is_server and os.environ.get("RUN_MAIN") != "true":
+    if is_server and (os.environ.get("RUN_MAIN") != "true" or os.path.exists(MIGRATE_MARKER)):
         subprocess.run([sys.executable, __file__, "migrate", "--noinput"], check=True, env={**os.environ, "VIBRAVID_SKIP_PRE_RUN_HOOKS": "1"})
+        if os.path.exists(MIGRATE_MARKER):
+            os.remove(MIGRATE_MARKER)
 
     if "RUN_MAIN" not in os.environ and "VIBRAVID_SKIP_PRE_RUN_HOOKS" not in os.environ:
         print("Running pre-run hooks...")

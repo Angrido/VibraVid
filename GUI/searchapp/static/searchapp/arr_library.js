@@ -104,10 +104,9 @@
             headers: {"Content-Type": "application/json", "X-CSRFToken": config.csrf},
             body: JSON.stringify(body),
         };
-        const response = await fetch(url, {...options, signal: AbortSignal.timeout(60000)});
-        let data = {};
-        try { data = await response.json(); } catch (_) {}
-        if (!response.ok || data.status === "error") throw new Error(data.message || tr("Request failed."));
+        // CN.fetchJSON sends an expired session to the login page instead of reading it as data.
+        const data = await window.CN.fetchJSON(url, {...options, signal: AbortSignal.timeout(60000)});
+        if (data.status === "error") throw new Error(data.message || tr("Request failed."));
         return data;
     }
 
@@ -254,7 +253,18 @@
         }
     }
 
+    // A hidden tab does not poll: the check keeps running on the server and the
+    // status catches up as soon as the tab is shown again.
+    let resumeOnShow = false;
+    document.addEventListener("visibilitychange", () => {
+        if (document.hidden || !resumeOnShow) return;
+        resumeOnShow = false;
+        clearTimeout(polling);
+        poll();
+    });
+
     async function poll() {
+        if (document.hidden) { polling = null; resumeOnShow = true; return; }
         try {
             const data = await request(config.statusUrl);
             render(data);

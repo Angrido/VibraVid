@@ -38,6 +38,18 @@ def _safe_format(value: str, template_context: dict[str, str]) -> str:
         return value
 
 
+# Characters a value substituted into an inline command could use to leave its quotes or start another command.
+_POSIX_SHELL_META = str.maketrans("", "", "'\"`$\\;&|<>()\r\n")
+_CMD_SHELL_META = str.maketrans("", "", '"%^&|<>!\r\n')
+
+
+def _shell_safe_context(template_context: dict[str, str]) -> dict[str, str]:
+    """Template values for an inline command, stripped of the shell's metacharacters: a title is data, and
+    `x'; touch /tmp/pwned; echo '` ran a command. The exact values stay available as the SC_* variables."""
+    table = _CMD_SHELL_META if os_manager.system == "windows" else _POSIX_SHELL_META
+    return {key: value.translate(table) for key, value in template_context.items()}
+
+
 def _should_run_on_current_os(hook: dict) -> bool:
     allowed_systems = hook.get("os")
     if not allowed_systems:
@@ -98,7 +110,26 @@ def _normalize_context(stage: str, context: dict[str, Any] | None = None) -> tup
     return normalized_context, env_context
 
 
-def _build_command_for_hook(hook: dict, stage: str, context: dict[str, Any] | None = None) -> tuple[list, dict]:
+def _cmd_line(script_path: str, args: list[str], env: dict[str, str]) -> str:
+    """``cmd`` line running *script_path* with *args*, none of them parsed by cmd.
+
+    A list goes through list2cmdline, which quotes for whitespace only: `&` in a title ran a second command.
+    Each value travels instead in an environment variable that cmd expands once, inside quotes, so `&`, `|`,
+    `^` and `%` stay literal. ``/s`` strips only the outer pair of quotes.
+    """
+    quoted = []
+    for index, value in enumerate([script_path, *args]):
+        if not value:
+            quoted.append('""')  # an empty variable would be left as the literal text %NAME%
+            continue
+        name = f"VIBRAVID_HOOK_ARG{index}"
+        # cmd cannot escape a quote inside quotes, and a line break ends the command: neither is a path character.
+        env[name] = value.replace('"', "'").replace("\r", " ").replace("\n", " ")
+        quoted.append(f'"%{name}%"')
+    return f'cmd /d /s /c "{" ".join(quoted)}"'
+
+
+def _build_command_for_hook(hook: dict, stage: str, context: dict[str, Any] | None = None) -> tuple[list | str, dict]:
     hook_type = str(hook.get("type", "")).strip().lower()
     normalized_context, env_context = _normalize_context(stage, context)
     script_path = hook.get("path")
@@ -125,7 +156,7 @@ def _build_command_for_hook(hook: dict, stage: str, context: dict[str, Any] | No
     if inline_command:
         inline_command = str(inline_command)
         if allow_inline_template:
-            inline_command = _safe_format(inline_command, template_context)
+            inline_command = _safe_format(inline_command, _shell_safe_context(template_context))
 
     if workdir:
         workdir = _safe_format(workdir, template_context)
@@ -141,9 +172,10 @@ def _build_command_for_hook(hook: dict, stage: str, context: dict[str, Any] | No
     if hook_type == "python":
         if not script_path:
             raise ValueError("Missing 'path' for python hook")
+        # Empty values keep their slot: dropping one moved every later argument to the wrong position.
         command = [sys.executable, script_path] + formatted_args
         logger.debug(f"Constructed python hook command: {command} and cwd: {workdir}")
-        return ([item for item in command if item], {"env": base_env, "cwd": workdir})
+        return (command, {"env": base_env, "cwd": workdir})
 
     if os_manager.system in ("linux", "darwin"):
         if hook_type in ("bash", "sh", "shell"):
@@ -163,7 +195,7 @@ def _build_command_for_hook(hook: dict, stage: str, context: dict[str, Any] | No
             else:
                 if not script_path:
                     raise ValueError("Missing 'path' for bat/cmd hook")
-                command = ["cmd", "/c", script_path] + formatted_args
+                command = _cmd_line(script_path, formatted_args, base_env)
             logger.debug(f"Constructed shell hook command: {command} and cwd: {workdir}")
             return (command, {"env": base_env, "cwd": workdir})
 

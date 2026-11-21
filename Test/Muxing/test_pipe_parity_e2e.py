@@ -36,19 +36,24 @@ DIRTY_CHAPTERS = [
 
 
 def _ffmpeg(*args):
-    subprocess.run([FFMPEG, "-v", "error", "-y", *args], check=True)
+    # Each call takes well under a second; the timeout turns a hung ffmpeg into a failure instead of a frozen suite.
+    subprocess.run([FFMPEG, "-nostdin", "-v", "error", "-y", *args], check=True, timeout=120)
 
 
 @pytest.fixture(scope="module")
 def media(tmp_path_factory):
     folder = tmp_path_factory.mktemp("parity")
     noise = f"anoisesrc=d={DURATION}:c=white:r=16000:seed=7"
-    _ffmpeg("-f", "lavfi", "-i", f"testsrc2=d={DURATION}:s=160x120:r=5", "-c:v", "libx264", "-preset", "ultrafast", str(folder / "video.mp4"))
-    _ffmpeg("-i", str(folder / "video.mp4"), "-c", "copy", "-movflags", "frag_keyframe+empty_moov+default_base_moof", str(folder / "video_frag.mp4"))
-    _ffmpeg("-f", "lavfi", "-i", noise, "-c:a", "aac", "-b:a", "64k", str(folder / "ref.m4a"))
-    _ffmpeg("-f", "lavfi", "-i", noise, "-af", "adelay=5000:all=1", "-c:a", "aac", "-b:a", "64k", str(folder / "delayed.m4a"))  # the same sound 5 s later
-    _ffmpeg("-f", "lavfi", "-i", noise, "-af", "atrim=start=5,asetpts=PTS-STARTPTS", "-c:a", "aac", "-b:a", "64k", str(folder / "advanced.m4a"))  # the same sound, 5 s of it already gone
-    _ffmpeg("-f", "lavfi", "-i", f"sine=f=440:d={DURATION + 20}:r=16000", "-c:a", "aac", "-b:a", "64k", str(folder / "long.m4a"))  # 20 s past the video
+    try:
+        _ffmpeg("-f", "lavfi", "-i", f"testsrc2=d={DURATION}:s=160x120:r=5", "-c:v", "libx264", "-preset", "ultrafast", str(folder / "video.mp4"))
+        _ffmpeg("-i", str(folder / "video.mp4"), "-c", "copy", "-movflags", "frag_keyframe+empty_moov+default_base_moof", str(folder / "video_frag.mp4"))
+        _ffmpeg("-f", "lavfi", "-i", noise, "-c:a", "aac", "-b:a", "64k", str(folder / "ref.m4a"))
+        _ffmpeg("-f", "lavfi", "-i", noise, "-af", "adelay=5000:all=1", "-c:a", "aac", "-b:a", "64k", str(folder / "delayed.m4a"))  # the same sound 5 s later
+        _ffmpeg("-f", "lavfi", "-i", noise, "-af", "atrim=start=5,asetpts=PTS-STARTPTS", "-c:a", "aac", "-b:a", "64k", str(folder / "advanced.m4a"))  # the same sound, 5 s of it already gone
+        _ffmpeg("-f", "lavfi", "-i", f"sine=f=440:d={DURATION + 20}:r=16000", "-c:a", "aac", "-b:a", "64k", str(folder / "long.m4a"))  # 20 s past the video
+    except subprocess.TimeoutExpired as exc:
+        # Some ffmpeg nightlies (seen with N-126374) never finish encoding AAC after adelay: the media cannot be made here.
+        pytest.skip(f"this ffmpeg hangs generating the test media: {exc.cmd[-1]}")
     return folder
 
 

@@ -16,9 +16,15 @@ async def download_monitor_loop() -> None:
         await asyncio.sleep(1)
         if not state._pending:
             continue
+        # Only the recent history can match a pending job: every expected file plus a margin for
+        # downloads started elsewhere, instead of the whole history every second.
+        recent = sum(info.get("expected", 1) for info in state._pending.values()) + 20
         try:
-            data = await gui_get("/api/get-downloads/")
+            data = await gui_get(f"/api/get-downloads/?history={recent}")
         except (OSError, ValueError):
+            continue
+        if data.get("error"):
+            # 401/403 (bot secret missing or wrong): an empty answer would mark every job as lost.
             continue
 
         active = data.get("active") or []

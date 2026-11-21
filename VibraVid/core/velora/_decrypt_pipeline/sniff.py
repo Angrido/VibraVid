@@ -16,13 +16,13 @@ def _reads_as_self_initializing_mp4(path: Path) -> bool:
 
 
 def _reads_as_plaintext_ts(path: Path) -> bool:
-    """True if *path* already starts with the MPEG-TS sync byte (0x47) -- i.e. it is already decrypted (or was never encrypted), so decrypting it again would corrupt it."""
+    """True if *path* reads as MPEG-TS (sync byte 0x47 at offsets 0, 188 and 376, as far as the file goes) -- already decrypted or never encrypted, so decrypting it again would corrupt it. One 0x47 byte is not enough: CBC ciphertext starts with it about once in 256 segments."""
     try:
         with open(path, "rb") as fh:
-            head = fh.read(1)
+            head = fh.read(377)
     except OSError:
         return False
-    return head == b"\x47"
+    return bool(head) and all(head[offset] == 0x47 for offset in (0, 188, 376) if offset < len(head))
 
 
 def _skip_post_decrypt() -> bool:

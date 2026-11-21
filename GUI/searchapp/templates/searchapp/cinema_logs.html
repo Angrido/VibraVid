@@ -95,23 +95,32 @@
     document.querySelectorAll("[data-clear-logs]").forEach(function (button) {
         button.addEventListener("click", async function () {
             var category = button.dataset.clearLogs;
+            // Deleting log files cannot be undone: ask first.
+            var ok = await CN.confirm(category === "arr"
+                ? { title: "Clear ARR logs?", text: "Every ARR log file is deleted. Active logs are emptied instead.", confirm: "Clear ARR logs" }
+                : { title: "Clear App logs?", text: "Every app log file is deleted. Active logs are emptied instead.", confirm: "Clear App logs" });
+            if (!ok) return;
             button.disabled = true;
+            var feedback = el("cn-logs-feedback");
             try {
                 var data = new FormData(el("cn-logs-csrf"));
                 data.set("category", category);
-                var response = await fetch("{% url 'logs_clear' %}", {method: "POST", body: data});
-                var result = await response.json();
+                await CN.fetchJSON("{% url 'logs_clear' %}", {method: "POST", body: data});
+                feedback.textContent = "Logs cleared. Active logs may receive new entries.";
+            } catch (error) {
+                var result = error.data || {};
+                feedback.textContent = result.failed && result.failed.length
+                    ? t("Some logs could not be cleared: {files}").replace("{files}", result.failed.join(", "))
+                    : result.error || "Could not clear logs. Please retry.";
+            } finally {
                 if (selectedCategory === category) {
                     contentGeneration++;
                     showLog("", false);
                     logsCurrentTitle.textContent = "Select a log file";
                 }
-                el("cn-logs-feedback").textContent = response.ok ? "Logs cleared. Active logs may receive new entries." :
-                    result.error || "Some logs could not be cleared: " + (result.failed || []).join(", ");
+                button.disabled = false;
                 loadLogsList();
-            } catch (_) {
-                el("cn-logs-feedback").textContent = "Could not clear logs. Please retry.";
-            } finally { button.disabled = false; }
+            }
         });
     });
 
@@ -157,8 +166,7 @@
 	}
 
 	function loadLogsList() {
-		fetch(URL_LOGS_LIST)
-			.then(function (r) { return r.json(); })
+		CN.fetchJSON(URL_LOGS_LIST)
 			.then(function (data) {
 				var appFiles = data.logs || [];
 				var arrFiles = data.arr || [];
@@ -170,7 +178,7 @@
 				renderLogList("cn-logs-list-arr", "arr", arrFiles);
 			})
 			.catch(function (err) {
-				logsCurrentTitle.textContent = "Could not load log list: " + err.message;
+				logsCurrentTitle.textContent = t("Could not load log list: {error}").replace("{error}", err.message);
 			});
 	}
 
@@ -186,8 +194,12 @@
 		logsCurrentTitle.textContent = "Loading " + name + "…";
 		rawLog = "";
 		copyButton.disabled = true;
-		fetch(URL_LOGS_CONTENT + "?category=" + encodeURIComponent(category) + "&name=" + encodeURIComponent(name))
-			.then(function (r) { return r.json(); })
+		CN.fetchJSON(URL_LOGS_CONTENT + "?category=" + encodeURIComponent(category) + "&name=" + encodeURIComponent(name))
+			.catch(function (err) {
+				// A 4xx with a JSON {error} body is still a readable answer for the viewer.
+				if (err.data && err.data.error) return err.data;
+				throw err;
+			})
 			.then(function (data) {
 				if (generation !== contentGeneration) return;
 				logsCurrentTitle.textContent = name;
@@ -201,7 +213,7 @@
 			.catch(function (err) {
 				if (generation !== contentGeneration) return;
 				logsCurrentTitle.textContent = name;
-				showLog("Network error: " + err.message, false);
+				showLog(t("Could not load the log: {error}").replace("{error}", err.message), false);
 			});
 	}
 

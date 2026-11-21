@@ -140,6 +140,10 @@ SITE_OPTS_TTL = 300
 
 _pending: dict[str, dict] = {}
 _CANCEL_TOKENS: "OrderedDict[str, str]" = OrderedDict()
+# (chat_id, callback data) of download buttons already used: a double tap must not start the same
+# download twice, and the GUI does not de-duplicate. Bounded like the other stores.
+_STARTED: "OrderedDict[tuple[int, bytes], None]" = OrderedDict()
+STARTED_MAX = 256
 PENDING_TIMEOUT = 6 * 3600
 FINALIZE_GRACE_SECONDS = 180
 SETTLE_SECONDS = 90
@@ -150,6 +154,6 @@ __all__ = [
     '_LOGBUF', '_RingHandler', '_ring', 'Config', 'cfg', 'client', '_REMOTE',
     'DEFAULT_SITE', 'PREFS_FILE', '_prefs', '_last_query', '_awaiting_scarica_query',
     '_awaiting_site_search', '_SITEOPTS_STORE', '_site_opts', '_site_opts_ts',
-    'SITE_OPTS_TTL', '_pending', '_CANCEL_TOKENS', 'PENDING_TIMEOUT',
+    'SITE_OPTS_TTL', '_pending', '_CANCEL_TOKENS', '_STARTED', 'STARTED_MAX', 'PENDING_TIMEOUT',
     'FINALIZE_GRACE_SECONDS', 'SETTLE_SECONDS',
 ]

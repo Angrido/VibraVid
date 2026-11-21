@@ -141,5 +141,5 @@ class AnimeWorldAPI(BaseStreamingAPI):
             selections = {"episode": episodes}
 
         scrape_serie = self.get_cached_scraper(media_item)
-        search_fn(direct_item=media_item.raw_data, selections=selections, scrape_serie=scrape_serie)
-        return True
+        result = search_fn(direct_item=media_item.raw_data, selections=selections, scrape_serie=scrape_serie)
+        return result is not False  # only an explicit False is a failure: some entry points return None

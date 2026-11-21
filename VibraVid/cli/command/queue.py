@@ -428,6 +428,26 @@ def clear(tag: str | None = None) -> None:
     console.print(f"[green]Cleared[/green] {total} item(s){f' with tag {tag!r}' if tag else ''}.")
 
 
+def clear_completed(tag: str | None = None) -> int:
+    """Remove the items that finished successfully (`done`) and return how many; pending, running and failed ones stay
+    (a failed item keeps its Retry). A queue file left empty is deleted, like `clear` does."""
+    removed = 0
+    for path in [p for p in _paths_for(tag) if os.path.exists(p)]:
+        with _QueueLock(path):
+            data = _load_queue(path)
+            items = data.get("items", [])
+            kept = [it for it in items if it.get("status") != "done"]
+            if len(kept) == len(items):
+                continue
+            removed += len(items) - len(kept)
+            if kept:
+                data["items"] = kept
+                _save_queue(path, data)
+            else:
+                os.remove(path)
+    return removed
+
+
 def _child_command(item_argv: list) -> list:
     if is_binary_installation:
         return [sys.executable, *item_argv]

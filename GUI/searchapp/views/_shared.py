@@ -313,6 +313,7 @@ def _run_download_in_thread(
     _add_scheduled_download(download_id, title, site, media_type, season, episodes,
                             poster=poster, planned_episodes=planned_episodes,
                             stop_scope=stop_scope, batch_id=_batch_id)
+    started = threading.Event()
 
     def _task():
         if _is_scheduled_cancelled(download_id):
@@ -320,6 +321,7 @@ def _run_download_in_thread(
             download_tracker.clear_stop_request(download_id)
             return False
         _acquire_download_slot()
+        started.set()
         slot_held = True
 
         def _release_slot_for_manual_choice():
@@ -449,7 +451,15 @@ def _run_download_in_thread(
             if slot_held:
                 _release_download_slot()
 
-    return _submit_download_task(_task) if _submit else _task
+    job = _submit_download_task(_task) if _submit else _task
+    # Callers that must stop or report this job (ARR timeout, bot API) read the real id here;
+    # `started` is set once the job holds a download slot, so a wait can exclude queue time.
+    try:
+        job.download_id = download_id
+        job.started = started
+    except AttributeError:
+        pass
+    return job
 
 
 def _handle_series_download(request: HttpRequest) -> HttpResponse:
@@ -512,8 +522,9 @@ def _handle_series_download(request: HttpRequest) -> HttpResponse:
                     metadata = filter_series_audio(api.get_series_metadata(media_item) or [], audio_language)
             except Exception:
                 logger.warning("Could not expand selected seasons", exc_info=True)
-                metadata = []
-        if audio_language:
+                metadata = None  # unknown: queue the seasons as chosen, each download loads its own data
+        # Only a real language filter narrows the seasons, and only with data to narrow on ("auto" is not a filter).
+        if metadata is not None and audio_filter_for_selection(audio_language):
             eligible_seasons = {str(s.number) for s in metadata}
             seasons = [s for s in seasons if s in eligible_seasons]
             if not seasons:
@@ -625,10 +636,14 @@ def _update_single_item(item: WatchlistItem) -> bool:
         else:
             if current_num_seasons > item.num_seasons:
                 item.has_new_seasons = True
-                item.num_seasons = current_num_seasons
                 changed = True
 
-            if current_last_season_episodes > item.last_season_episodes:
+            if current_num_seasons != item.num_seasons:
+                # The count belongs to the previous last season: a new season starts from its own count.
+                item.num_seasons = current_num_seasons
+                item.last_season_episodes = current_last_season_episodes
+                changed = True
+            elif current_last_season_episodes > item.last_season_episodes:
                 item.has_new_episodes = True
                 item.last_season_episodes = current_last_season_episodes
                 changed = True

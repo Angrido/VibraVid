@@ -1,6 +1,7 @@
 # 07.05.26
 
 
+import copy
 import json
 import logging
 import os
@@ -18,6 +19,8 @@ logger = logging.getLogger("ARR")
 
 # Module-level lock for thread-safe enqueue operations
 _enqueue_lock = threading.Lock()
+# Dedup keys whose download is running in this process: the orphan recovery must leave them alone.
+_live_dedup_keys: set[str] = set()
 
 
 def _load_arr_config() -> dict:
@@ -49,7 +52,9 @@ def _load_arr_config() -> dict:
     try:
         file_arr = config_manager.config.get_section("ARR")
         if file_arr:
-            arr_cfg.update(file_arr)
+            # Deep copy: get_section is shallow, and the env overrides below would land in the live config
+            # (and in config.toml at its next save).
+            arr_cfg.update(copy.deepcopy(file_arr))
     except Exception as exc:
         logger.warning(f"Could not read ARR config from config.toml: {exc}")
 
@@ -265,15 +270,9 @@ def _enqueue_if_new(
             logger.debug(f"Skipping recently completed: {key}")
             return False
 
-        # Re-open a previously failed/non-successful queue row for retry.
-        reusable = (
-            ArrProcessingQueue.objects.filter(
-                dedup_key=key,
-                completed_at__isnull=False,
-            )
-            .exclude(success=True)
-            .first()
-        )
+        # Re-open a closed row: a failure to retry, or a success older than the window above whose title
+        # is missing again (file deleted). dedup_key is unique, so a second row for the key cannot be created.
+        reusable = ArrProcessingQueue.objects.filter(dedup_key=key, completed_at__isnull=False).first()
         if reusable:
             max_attempts = int(_load_arr_config().get("max_retry_attempts") or 0)
             if sync_source == "polling" and max_attempts and reusable.attempts >= max_attempts:
@@ -338,6 +337,7 @@ def _mark_downloading(item: dict, season_num=None, ep_num=None) -> None:
     from searchapp.models import ArrMediaRequest, ArrProcessingQueue
 
     key = _dedup_key(item, season_num, ep_num)
+    _live_dedup_keys.add(key)
     try:
         queue_entry = ArrProcessingQueue.objects.filter(dedup_key=key, completed_at__isnull=True).first()
         if queue_entry:
@@ -707,7 +707,7 @@ def _reconcile_orphaned_downloads(older_than_seconds: int | None = None) -> int:
     candidates = ArrProcessingQueue.objects.filter(
         started_at__isnull=False,
         completed_at__isnull=True,
-    ).select_related("media_request")
+    ).exclude(dedup_key__in=set(_live_dedup_keys)).select_related("media_request")
     if older_than_seconds is not None:
         candidates = candidates.filter(started_at__lte=timezone.now() - timedelta(seconds=older_than_seconds))
 
@@ -823,13 +823,17 @@ def trigger_webhook_sync(event_data: dict) -> int:
 
         logger.info(f"[trigger_webhook_sync] Found movie in Radarr: {matched.get('title')} (id={matched.get('id')})")
 
-        # Apply tag filtering (hold/pause check)
-        radarr_tags = radarr.get_tags_map()
-        tag_names = [radarr_tags.get(t, "") for t in matched.get("tags", [])]
-        logger.info(f"[trigger_webhook_sync] Movie tags: {tag_names}")
+        # Same tag rules as polling (whitelist/blacklist, hold/pausa)
+        from .processor_service import ArrProcessorService
 
-        if "hold" in tag_names or "pausa" in tag_names:
-            logger.info(f"[trigger_webhook_sync] Movie '{matched['title']}' on hold/pause, skipping webhook")
+        processor = ArrProcessorService(
+            sonarr=sonarr,
+            radarr=radarr,
+            tags_mode=cfg.get("tags_mode", "BLACKLIST"),
+            active_tag_ids=cfg.get("active_tag_ids", []),
+        )
+        if not processor.allowed_by_tags(matched["title"], matched.get("tags", []), "radarr"):
+            logger.info(f"[trigger_webhook_sync] Movie '{matched['title']}' filtered out by tag rules, skipping webhook")
             return -1  # signal to stop retrying
 
         provider = _extract_provider_from_tags(radarr, matched.get("tags", []))
@@ -991,7 +995,7 @@ def trigger_webhook_sync(event_data: dict) -> int:
             logger.info(f"[trigger_webhook_sync] Series '{matched['title']}' is unmonitored in Sonarr, skipping")
             return -1
 
-        if not processor._check_tags_validity(serie_item["title"], serie_item["tags"]):
+        if not processor.allowed_by_tags(serie_item["title"], serie_item["tags"], "sonarr"):
             logger.info(f"[trigger_webhook_sync] Series '{matched['title']}' filtered out by tag rules, skipping")
             return -1
 
@@ -1016,7 +1020,7 @@ def trigger_webhook_sync(event_data: dict) -> int:
         seasons_dict = {}
         for ep in missing_eps:
             s_num = ep.get("seasonNumber")
-            if s_num is None or s_num == 0:
+            if s_num is None or not processor.allowed_by_tags(serie_item["title"], serie_item["tags"], "sonarr", s_num):
                 continue
             if s_num not in seasons_dict:
                 seasons_dict[s_num] = {"number": s_num, "episodes": []}
@@ -1146,13 +1150,13 @@ def trigger_sonarr_webhook_sync(event_data: dict) -> int:
         active_tag_ids=cfg.get("active_tag_ids", []),
     )
 
-    if not processor._check_tags_validity(serie["title"], serie["tags"]):
+    if not processor.allowed_by_tags(serie["title"], serie["tags"], "sonarr"):
         logger.info(f"[Sonarr WH] Series '{serie['title']}' filtered by tags, skipping")
         return -1
 
-    # For SeriesAdd events: get episodes directly from Sonarr API
-    if event_type == "seriesadd":
-        logger.info(f"[Sonarr WH] SeriesAdd event — getting episodes for '{serie['title']}'")
+    # For SeriesAdd and EpisodeFileDelete events: get episodes directly from Sonarr API
+    if event_type in ("seriesadd", "episodefiledelete"):
+        logger.info(f"[Sonarr WH] {event_type} event — getting episodes for '{serie['title']}'")
         from .downloader_service import ArrDownloaderService
 
         downloader = ArrDownloaderService(sonarr, None)
@@ -1178,7 +1182,7 @@ def trigger_sonarr_webhook_sync(event_data: dict) -> int:
         seasons_dict = {}
         for ep in missing_eps:
             s_num = ep.get("seasonNumber")
-            if s_num is None or s_num == 0:
+            if s_num is None or not processor.allowed_by_tags(serie["title"], serie["tags"], "sonarr", s_num):
                 continue
             if s_num not in seasons_dict:
                 seasons_dict[s_num] = {"number": s_num, "episodes": []}
@@ -1233,11 +1237,22 @@ def trigger_sonarr_webhook_sync(event_data: dict) -> int:
         logger.info("[Sonarr WH] No episodes in webhook payload")
         return 0
 
+    # An episode Sonarr already has a file for (imported from another client) must not be downloaded
+    # again into the same folder. Unknown state (Sonarr unreachable) does not block, as for monitoring.
+    try:
+        with_file = {e.get("id") for e in sonarr.get_episodes_for_series(series_id) if e.get("hasFile")}
+    except Exception as exc:
+        logger.warning(f"[Sonarr WH] Could not read file state for series {series_id}: {exc}")
+        with_file = set()
+
     # Build seasons/episodes structure from webhook payload
     seasons_dict = {}
     for ep in wh_episodes:
         s_num = ep.get("seasonNumber")
-        if s_num is None:
+        if s_num is None or not processor.allowed_by_tags(serie["title"], serie["tags"], "sonarr", s_num):
+            continue
+        if ep.get("id") in with_file:
+            logger.info(f"[Sonarr WH] S{s_num}E{ep.get('episodeNumber')} of '{serie['title']}' already has a file, skipping")
             continue
         if s_num not in seasons_dict:
             seasons_dict[s_num] = {"number": s_num, "episodes": []}
@@ -1361,8 +1376,13 @@ def trigger_radarr_webhook_sync(event_data: dict) -> int:
         active_tag_ids=cfg.get("active_tag_ids", []),
     )
 
-    if not processor._check_tags_validity(movie_item["title"], movie_item["tags"]):
+    if not processor.allowed_by_tags(movie_item["title"], movie_item["tags"], "radarr"):
         logger.info(f"[Radarr WH] Movie '{movie_item['title']}' filtered by tags, skipping")
+        return -1
+
+    # Imported from another client (On Download): downloading it again would duplicate the file.
+    if movie.get("hasFile"):
+        logger.info(f"[Radarr WH] Movie '{movie_item['title']}' already has a file, skipping")
         return -1
 
     # Process movie
@@ -1393,6 +1413,7 @@ def _mark_completed(item: dict, season_num=None, ep_num=None):
     from searchapp.models import ArrMediaRequest, ArrProcessingQueue
 
     key = _dedup_key(item, season_num, ep_num)
+    _live_dedup_keys.discard(key)
     try:
         queue_entry = ArrProcessingQueue.objects.filter(dedup_key=key, completed_at__isnull=True).first()
         if queue_entry:
@@ -1411,6 +1432,7 @@ def _mark_failed(item: dict, error: str, season_num=None, ep_num=None):
     from searchapp.models import ArrMediaRequest, ArrProcessingQueue
 
     key = _dedup_key(item, season_num, ep_num)
+    _live_dedup_keys.discard(key)
     try:
         queue_entry = ArrProcessingQueue.objects.filter(dedup_key=key, completed_at__isnull=True).first()
         if queue_entry:
@@ -1424,7 +1446,8 @@ def _mark_failed(item: dict, error: str, season_num=None, ep_num=None):
                 status = ArrMediaRequest.Status.IMPORT_PENDING
                 reason = "import_not_confirmed"
             
-            if "unmonitored" not in normalized_error:
+            # Unmonitored or already queued in Sonarr/Radarr: VibraVid did not try, so the retry cap is not used up.
+            if "unmonitored" not in normalized_error and normalized_error != "in_arr_queue":
                 queue_entry.attempts += 1
                 max_attempts = int(_load_arr_config().get("max_retry_attempts") or 0)
                 if max_attempts and queue_entry.attempts == max_attempts:

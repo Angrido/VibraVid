@@ -3,8 +3,6 @@
 import logging
 from typing import Any
 
-import requests
-
 from ._base import ArrClient
 
 logger = logging.getLogger("ARR.RADARR")
@@ -28,13 +26,8 @@ class RadarrClient(ArrClient):
         return self._get(f"/movie/{movie_id}").json()
 
     def movie_exists(self, movie_id: int) -> bool:
-        """Return True if the movie is still present in Radarr."""
-        try:
-            resp = requests.get(f"{self._base}/movie/{movie_id}", headers=self._headers, timeout=self.timeout)
-            return resp.ok
-        except Exception as exc:
-            logger.debug(f"Radarr movie {movie_id} existence check failed: {exc}")
-            return False
+        """Return True unless Radarr says the movie is gone (404)."""
+        return self._exists(f"/movie/{movie_id}")
 
     def update_movie_path(self, movie_id: int, new_path: str) -> bool:
         """Update the root path of a movie so Radarr expects files there."""

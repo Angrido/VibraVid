@@ -6,7 +6,7 @@
 		{% if card.poster %}<img src="{{ card.poster }}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" width="200" height="300" onerror="this.remove()">{% endif %}
 		<span class="cn-poster-fill"><span class="cn-rule"></span><span class="cn-ptitle" data-no-tr>{{ card.title }}</span></span>
 		<span class="cn-flag">{% include "searchapp/_arr_library_state.html" with state=card.state kind=card.kind missing=card.missing %}<span class="cn-st" data-lib-activity hidden></span></span>
-		{% if card.kind == "serie" and card.aired %}<span class="cn-runbar" aria-hidden="true"><i style="width:{{ card.percent }}%"></i></span>{% endif %}
+		{% if card.kind == "serie" and card.aired %}<span class="cn-runbar" aria-hidden="true">{# no fill at 0%: the full-width fill would still cast its glow #}{% if card.percent %}<i style="--p: {{ card.percent }}%"></i>{% endif %}</span>{% endif %}
 	</span>
 	<span class="lib-cap">
 		<span class="cn-cap" data-no-tr>{{ card.title }}</span>

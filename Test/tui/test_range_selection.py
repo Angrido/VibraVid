@@ -2,6 +2,7 @@
 
 """Tests for TUI episode range selection and parsing."""
 
+import pytest
 from textual.widgets._selection_list import Selection
 
 from VibraVid.tui.widgets.range_selection_list import RangeSelectionList, parse_range_expression
@@ -39,6 +40,36 @@ def test_range_selection_list_methods():
     is_active, start_idx, end_idx = rsl.toggle_visual_anchor()
     assert is_active is False
     assert rsl.anchor_index is None
+
+
+@pytest.mark.anyio
+async def test_escape_clears_the_range_anchor_before_going_back():
+    """The app's priority Esc binding went back a screen before the list could clear its anchor."""
+    from textual.screen import Screen
+
+    from VibraVid.tui.app import VibraVidApp
+
+    class _ListScreen(Screen):
+        def compose(self):
+            yield RangeSelectionList(Selection("Ep 1", 1), Selection("Ep 2", 2), id="eps")
+
+    app = VibraVidApp()
+    async with app.run_test(size=(140, 40)) as pilot:
+        screen = _ListScreen()
+        app.push_screen(screen)
+        await pilot.pause()
+        rsl = screen.query_one("#eps", RangeSelectionList)
+        rsl.focus()
+        rsl.anchor_index = 0
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert rsl.anchor_index is None
+        assert app.screen is screen
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert app.screen is not screen
 
 
 def test_get_clicked_option_index():

@@ -19,7 +19,9 @@ Site index numbers follow the services that are switched on: services listed in 
 
 ## Series and year
 
-`--season` / `--episode` skip the prompts. Values: a number, a range `"1-5"`, or `"*"` for all.
+`--season` / `--episode` skip the prompts. Values: a number, a range `"1-5"`, a list `"1,3"`, or `"*"` for all.
+
+A `--season` value is a season number; it is read as a position in the list (1 = first season) only when no season has that number (e.g. seasons named after years). Each season is downloaded once, even if listed twice. With several seasons, `--episode` applies to each of them (`--season "1-2" --episode 1` downloads episode 1 of seasons 1 and 2); without `--episode`, or with `--season "*"`, every episode is downloaded.
 
 ```bash
 python manual.py -i streamingcommunity --search "breaking bad" --item 0 --season 1 --episode 3
@@ -27,6 +29,7 @@ python manual.py -i streamingcommunity --search "breaking bad" --item 0 --season
 python manual.py -i streamingcommunity --search "breaking bad" --item 0 --season 1 --episode "*"   # whole season
 python manual.py -i streamingcommunity --search "breaking bad" --item 0 --season "*"               # all seasons
 python manual.py -i streamingcommunity --search "breaking bad" --item 0 --season "1-3"
+python manual.py -i streamingcommunity --search "breaking bad" --item 0 --season "1-2" --episode 1   # episode 1 of seasons 1 and 2
 
 python manual.py -i streamingcommunity --search "dune" --year 2021          # exact year
 python manual.py -i streamingcommunity --search "batman" --year "1990-2015" # range

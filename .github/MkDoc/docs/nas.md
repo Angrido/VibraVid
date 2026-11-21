@@ -248,6 +248,8 @@ This pulls the latest published image and recreates the container without touchi
 
 When a new version is available, VibraVid will show an update banner in the web UI. Follow the on-screen instructions to apply the update.
 
+The one-click update needs the Docker socket mounted and owned by a group other than `root`; on many NAS it belongs to `root`, and then the container log explains that the in-app update is off. Update with `docker compose pull && docker compose up -d` (or your NAS's container manager), see [Docker](docker.md).
+
 ---
 
 ## Troubleshooting

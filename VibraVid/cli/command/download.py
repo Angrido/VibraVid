@@ -185,7 +185,7 @@ def handle_direct_download(args) -> bool:
 
             if error:
                 logger.error(f"MP4 download error: {error}")
-                console.print(f"[red]Dio Cancaro: {error}")
+                console.print(f"[red]Error: {error}")
                 return True, False
 
         elif url_type == "hls":
@@ -208,7 +208,7 @@ def handle_direct_download(args) -> bool:
 
             if error:
                 logger.error(f"HLS download error: {error}")
-                console.print(f"[red]Dio Cancaro: {error}")
+                console.print(f"[red]Error: {error}")
                 return True, False
 
         elif url_type == "dash":
@@ -229,7 +229,7 @@ def handle_direct_download(args) -> bool:
 
             if error:
                 logger.error(f"DASH download error: {error}")
-                console.print(f"[red]Dio Cancaro: {error}")
+                console.print(f"[red]Error: {error}")
                 return True, False
 
         elif url_type == "ism":
@@ -250,12 +250,12 @@ def handle_direct_download(args) -> bool:
 
             if error:
                 logger.error(f"ISM download error: {error}")
-                console.print(f"[red]Dio Cancaro: {error}")
+                console.print(f"[red]Error: {error}")
                 return True, False
 
         elif url_type == "yt-dlp":
-            use_proxy = getattr(args, "use_proxy", False)
-            proxy_url = get_proxy_url() if use_proxy else None
+            # get_proxy_url() already honours REQUESTS.use_proxy (which --use_proxy sets) and proxy_scope.
+            proxy_url = get_proxy_url()
             list_formats = bool(getattr(args, "list_formats", False))
             interactive_format = bool(getattr(args, "interactive_format", False))
 
@@ -313,7 +313,7 @@ def handle_direct_download(args) -> bool:
 
             if error:
                 logger.error(f"yt-dlp download error: {error}")
-                console.print(f"[red]Dio Cancaro: {error}")
+                console.print(f"[red]Error: {error}")
                 return True, False
 
         elif url_type == "custom":
@@ -329,7 +329,7 @@ def handle_direct_download(args) -> bool:
 
             if error:
                 logger.error(f"Custom manifest download error: {error}")
-                console.print(f"[red]Dio Cancaro: {error}")
+                console.print(f"[red]Error: {error}")
                 return True, False
 
         else:

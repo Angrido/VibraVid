@@ -198,6 +198,7 @@ CODEC_EXTENSION_MAP: dict[str, str] = {
     "stpp": "ttml",
     "ttml": "ttml",
     "srt": "srt",
+    "subrip": "srt",  # ffprobe's codec_name for SRT
     "ass": "ass",
     "ssa": "ssa",
 }

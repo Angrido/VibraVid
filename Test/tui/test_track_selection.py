@@ -85,3 +85,35 @@ async def test_cancelling_the_picker_stops_the_download():
 
     assert errors and "cancelled" in str(errors[0])
     download_tracker.clear_stop_request("dl2")
+
+
+@pytest.mark.anyio
+async def test_escape_on_the_picker_stops_the_download():
+    """The app-wide Esc binding has priority: it must cancel the picker, not drop its answer."""
+    app = VibraVidApp()
+    streams = _streams()
+    errors = []
+
+    def worker():
+        try:
+            manual_track_broker.choose(
+                "dl3", streams, cancelled=lambda: download_tracker.is_stopped("dl3"), timeout=10
+            )
+        except Exception as exc:
+            errors.append(exc)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        download_tracker.start_download("dl3", "t", "site")
+        thread = threading.Thread(target=worker)
+        thread.start()
+        for _ in range(40):
+            await pilot.pause(0.1)
+            if isinstance(app.screen, TrackSelectModal):
+                break
+        await pilot.pause(0.3)
+        await pilot.press("escape")
+        await pilot.pause(0.8)
+        thread.join(5)
+
+    assert errors and "cancelled" in str(errors[0])
+    download_tracker.clear_stop_request("dl3")

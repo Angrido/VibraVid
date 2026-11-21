@@ -89,3 +89,5 @@ allow_inline_template = true
 | `{stage}` | Current hook stage |
 
 The same values are exposed as environment variables with an `SC_` prefix (`SC_DOWNLOAD_PATH`, `SC_DOWNLOAD_SUCCESS`, `SC_HOOK_STAGE`, ...).
+
+Inside an inline `command` (`allow_inline_template = true`) each value is stripped of the shell's special characters, so a title can never close the quotes around it or start another command: on macOS/Linux `'` `"` `` ` `` `$` `\` `;` `&` `|` `<` `>` `(` `)` and line breaks, on Windows `"` `%` `^` `&` `|` `<` `>` `!` and line breaks (`L'amica geniale` becomes `Lamica geniale`, `Film (2020).mkv` becomes `Film 2020.mkv`). When the exact value matters, such as a path, read the environment variable instead (`"$SC_DOWNLOAD_PATH"` in bash, `"%SC_DOWNLOAD_PATH%"` in cmd) or use a script with `path` and `args`, whose values are passed unchanged.

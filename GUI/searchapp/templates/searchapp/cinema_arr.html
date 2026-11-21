@@ -12,14 +12,15 @@
 {% block title %}ARR Queue — VibraVid{% endblock %}
 
 {% block content %}
-<div class="cn-pad" style="padding-top:34px">
+<div class="cn-pad is-tight">
 
 	<div class="cn-page-hd">
 		<h1 class="cn-blast">ARR Queue</h1>
 		<p>What VibraVid has taken on from Sonarr, Radarr, webhooks and periodic polling.</p>
 	</div>
 
-	<div class="cn-slab" id="cn-arr-stats">
+	{# data-busy drives the live refresh: it polls only while something is pending or downloading. #}
+	<div class="cn-slab" id="cn-arr-stats" data-busy="{% if status_counts.pending or status_counts.downloading %}1{% endif %}">
 		<div class="cn-big"><span class="cn-v">{{ total_count }}</span><span class="cn-k">Total</span></div>
 		<div class="cn-big"><span class="cn-v is-hot">{{ active_count }}</span><span class="cn-k">Open</span></div>
 		<div class="cn-big"><span class="cn-v">{{ status_counts.pending|default:"0" }}</span><span class="cn-k">Pending</span></div>
@@ -27,7 +28,7 @@
 		<div class="cn-big"><span class="cn-v">{{ status_counts.completed|default:"0" }}</span><span class="cn-k">Completed</span></div>
 		<div class="cn-big"><span class="cn-v">{{ status_counts.failed|default:"0" }}</span><span class="cn-k">Failed</span></div>
 		<div class="cn-big"><span class="cn-v">{{ status_counts.skipped|default:"0" }}</span><span class="cn-k">Skipped</span></div>
-		<span style="margin-left:auto;display:flex;gap:11px;flex-wrap:wrap;align-items:center">
+		<span class="cn-slab-acts">
 			<span class="cn-st {% if arr_enabled %}is-done{% else %}is-wait{% endif %}">
 				ARR {% if arr_enabled %}enabled{% else %}disabled{% endif %}
 			</span>
@@ -45,10 +46,10 @@
 		</span>
 	</div>
 
-	<p class="cn-msg" id="cn-arr-msg" hidden></p>
+	<div role="status"><p class="cn-msg" id="cn-arr-msg" hidden></p></div>
 
-	<form method="get" class="cn-filters" style="align-items:end;margin-bottom:22px">
-		<div class="cn-fgroup" style="flex:1;min-width:240px">
+	<form method="get" class="cn-filters is-bar">
+		<div class="cn-fgroup is-wide">
 			<label class="cn-tag" for="cn-arr-q">Search</label>
 			<input class="cn-input" id="cn-arr-q" type="search" name="q" value="{{ filters.q }}"
 			       placeholder="Title, provider, ID or dedup key">
@@ -83,11 +84,11 @@
 			</select>
 		</div>
 
-		<button class="cn-cta" type="submit">Filter</button>
+		<button class="cn-cta is-ghost" type="submit">Filter</button>
 	</form>
 
 	<div id="cn-arr-list">
-	<div class="cn-strip-hd" style="padding:0 0 15px">
+	<div class="cn-strip-hd">
 		<h2>Requests</h2>
 		<span class="cn-n">
 			{{ shown_count }} shown{% if filtered_count > 300 %} · page limit 300 of {{ filtered_count }}{% endif %}
@@ -130,7 +131,7 @@
 								</td>
 
 								<td>
-									<b style="text-transform:uppercase">{{ item.arr_source }}</b>
+									<b class="cn-caps">{{ item.arr_source }}</b>
 									<span class="cn-s">{{ item.get_sync_source_display }}</span>
 									<span class="cn-s">ARR {{ item.arr_id }}{% if item.episode_id %} · ep {{ item.episode_id }}{% endif %}</span>
 								</td>
@@ -140,7 +141,7 @@
 									<span class="cn-s">TMDB {{ item.tmdb_id|default:"—" }} · TVDB {{ item.tvdb_id|default:"—" }}</span>
 								</td>
 
-								<td class="cn-mono" style="white-space:nowrap">
+								<td class="cn-mono is-nowrap">
 									<span class="cn-s">queued {{ entry.enqueued_at|date:"m/d/y H:i" }}</span>
 									<span class="cn-s">started {% if entry.started_at %}{{ entry.started_at|date:"m/d/y H:i" }}{% else %}—{% endif %}</span>
 									<span class="cn-s">closed {% if entry.completed_at %}{{ entry.completed_at|date:"m/d/y H:i" }}{% else %}—{% endif %}</span>
@@ -169,7 +170,7 @@
 			</table>
 		</div>
 	{% else %}
-		<p class="cn-empty" style="padding-left:0">
+		<p class="cn-empty is-flush">
 			Nothing queued. When Sonarr or Radarr request something, it shows up here.
 		</p>
 	{% endif %}
@@ -187,7 +188,8 @@
 	var LIVE_IDS = ["cn-arr-stats", "cn-arr-list"];
 	var REFRESH_MS = 4000;
 	var lastHtml = {};
-	var timer = null;
+	// After an action the list may take a moment to show the new state: keep polling a while.
+	var watchUntil = 0;
 
 	function say(text, kind) {
 		msg.textContent = text;
@@ -202,47 +204,59 @@
 			if (!fresh || !current || lastHtml[id] === fresh.innerHTML) return;
 			var wrap = current.querySelector(".cn-tablewrap");
 			var scrollLeft = wrap ? wrap.scrollLeft : 0;
+			// Row buttons are identified by their action URL: put focus back on the same one.
+			var focused = current.contains(document.activeElement) ? document.activeElement : null;
+			var focusKey = focused && (focused.dataset.url || focused.id);
 			lastHtml[id] = fresh.innerHTML;
 			current.replaceWith(fresh);
 			var freshWrap = fresh.querySelector(".cn-tablewrap");
 			if (freshWrap) freshWrap.scrollLeft = scrollLeft;
+			if (focusKey) {
+				var again = Array.prototype.filter.call(fresh.querySelectorAll("[data-url], [id]"), function (node) {
+					return node.dataset.url === focusKey || node.id === focusKey;
+				})[0];
+				if (again && !again.disabled) again.focus({ preventScroll: true });
+			}
 		});
 	}
 
-	function refresh() {
-		clearTimeout(timer);
-		timer = null;
-		if (document.hidden) return Promise.resolve();
+	function busy() {
+		var stats = document.getElementById("cn-arr-stats");
+		return !!(stats && stats.dataset.busy) || Date.now() < watchUntil;
+	}
+
+	function fetchPage() {
 		return fetch(window.location.href, { cache: "no-store" })
-			.then(function (r) { return r.ok ? r.text() : ""; })
+			.then(function (r) {
+				// A redirect to the login page is not this page: stop instead of swapping it in.
+				if (r.redirected && /^\/login\/?$/.test(new URL(r.url).pathname)) { location.reload(); return ""; }
+				return r.ok ? r.text() : "";
+			})
 			.then(function (html) {
 				if (html) swapLive(new DOMParser().parseFromString(html, "text/html"));
-			})
-			.catch(function () {})
-			.then(function () {
-				clearTimeout(timer);
-				timer = setTimeout(refresh, REFRESH_MS);
 			});
+	}
+	// Polls only while something is pending/downloading (or right after an action) and the tab is visible.
+	var poller = CN.poll(fetchPage, function () { return busy() ? REFRESH_MS : 0; });
+	function refresh() {
+		watchUntil = Math.max(watchUntil, Date.now() + 30000);
+		poller.start();
 	}
 
 	LIVE_IDS.forEach(function (id) {
 		var node = document.getElementById(id);
 		if (node) lastHtml[id] = node.innerHTML;
 	});
-	timer = setTimeout(refresh, REFRESH_MS);
-	document.addEventListener("visibilitychange", function () {
-		if (!document.hidden) refresh();
-	});
+	if (busy()) poller.later(REFRESH_MS);
 
 	function startSync(btn) {
 		btn.disabled = true;
 		say("Sync started…");
 
-		fetch("{% url 'arr_trigger_sync' %}", {
+		CN.fetchJSON("{% url 'arr_trigger_sync' %}", {
 			method: "POST",
 			headers: { "X-CSRFToken": "{{ csrf_token }}" }
 		})
-			.then(function (r) { return r.json(); })
 			.then(function (data) {
 				if (data.status === "error" || data.status === "disabled") {
 					throw new Error(data.message || "not started");
@@ -257,16 +271,12 @@
 	}
 
 	function postTo(url) {
-		return fetch(url, {
+		return CN.fetchJSON(url, {
 			method: "POST",
 			headers: { "X-CSRFToken": "{{ csrf_token }}" }
-		}).then(function (r) {
-			return r.json().then(function (data) {
-				if (!r.ok || data.status === "error") {
-					throw new Error(data.message || "Request failed.");
-				}
-				return data;
-			});
+		}).then(function (data) {
+			if (data.status === "error") throw new Error(data.message || "Request failed.");
+			return data;
 		});
 	}
 

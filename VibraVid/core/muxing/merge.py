@@ -268,7 +268,8 @@ def _build_global_metadata_flags() -> list:
 
 def _mkvmerge_lang_flag(track: dict[str, Any], default: str = "und") -> str:
     """mkverge store the language in the IETF format (e.g. es-419) rather than ISO 639-2 (e.g. spa)."""
-    raw = track.get("language") or track.get("name") or track.get("lang") or default
+    # "lang" before "name": a 2nd audio of one language is named "en.2" (velora _build_status), its language is "lang"
+    raw = track.get("language") or track.get("lang") or track.get("name") or default
     return resolve_ietf(str(raw))
 
 
@@ -300,7 +301,7 @@ def _mkvmerge_add_track(
 
 def video_track_name(video_path: str, hybrid: bool = False, quality: str = "") -> str:
     """Title of the video track in the final file: its resolution (e.g. ``1080p``), plus ``(HYBRID)`` for a DV + HDR10 mux."""
-    quality = quality or get_media_metadata(video_path).get("quality", "")
+    quality = quality or get_media_metadata(video_path, with_bitrate=False).get("quality", "")  # no full-file packet scan
     return " ".join(part for part in (quality, "(HYBRID)" if hybrid else "") if part)
 
 
@@ -411,8 +412,10 @@ def inject_chapters(file_path: str, chapters: list | None = None, temp_dir: str 
 
     base, ext = os.path.splitext(file_path)
     tmp_out = f"{base}_chapters{ext}"
+    max_ok_exit_code = 0
 
     if (MUX_ENGINE == "mkvmerge" or ext.lower() == ".mkv") and get_mkvmerge_path():
+        max_ok_exit_code = 1  # mkvmerge: 1 = warnings only
         chapter_file = _write_ogm_chapters(chapters)
         cmd = [get_mkvmerge_path(), "-o", tmp_out, "--chapters", chapter_file, file_path]
         logger.info(f"Running chapter injection (mkvmerge) command: {' '.join(cmd)}")
@@ -451,8 +454,10 @@ def inject_chapters(file_path: str, chapters: list | None = None, temp_dir: str 
     except OSError:
         pass
 
-    if not (os.path.exists(tmp_out) and os.path.getsize(tmp_out) > 0):
+    # A failed or killed pass can leave a truncated tmp_out: it must never replace the finished file.
+    if _mux_failed(result_json, max_ok_exit_code) or not (os.path.exists(tmp_out) and os.path.getsize(tmp_out) > 0):
         logger.warning("[inject_chapters] chapter injection failed, keeping file without chapters")
+        _discard_output(tmp_out)
         return file_path, result_json
 
     try:
@@ -509,9 +514,11 @@ def embed_poster(file_path: str, image_url: str | None = None):
         f.write(image_bytes)
 
     tmp_out = f"{base}_poster{ext}"
+    max_ok_exit_code = 0
 
     try:
         if MUX_ENGINE == "mkvmerge":
+            max_ok_exit_code = 1  # mkvmerge: 1 = warnings only
             cmd = [
                 get_mkvmerge_path(),
                 "-o",
@@ -556,8 +563,10 @@ def embed_poster(file_path: str, image_url: str | None = None):
     finally:
         shutil.rmtree(tmp_cover_dir, ignore_errors=True)
 
-    if not (os.path.exists(tmp_out) and os.path.getsize(tmp_out) > 0):
+    # A failed or killed pass can leave a truncated tmp_out: it must never replace the finished file.
+    if _mux_failed(result_json, max_ok_exit_code) or not (os.path.exists(tmp_out) and os.path.getsize(tmp_out) > 0):
         logger.warning("[embed_poster] poster embedding failed, keeping file without poster")
+        _discard_output(tmp_out)
         return file_path, result_json
 
     try:
@@ -732,7 +741,7 @@ def _prepare_subtitle_tracks(
             continue
 
         # Normal subtitle: fix extension / convert format
-        corrected_path = convert_subtitle(original_path, FORCE_SUBTITLE)
+        corrected_path = convert_subtitle(original_path, FORCE_SUBTITLE, media_duration=video_duration)
         if not corrected_path:
             logger.warning(f"join_subtitles: conversion failed for '{os.path.basename(original_path)}', skipping (raw file is not mux-safe)")
             console.print(f"[yellow]    Skipping subtitle (no usable captions): {os.path.basename(original_path)}")
@@ -846,6 +855,20 @@ def _reject_truncated_video(video_path: str, video_duration: float, audio_durati
     return "", {"exit_code": 1, "video_truncated": True}
 
 
+def _mux_failed(result_json: dict | None, max_ok_exit_code: int = 0) -> bool:
+    """True when the muxer timed out or exited with a failure code: a killed or failed muxer can still leave a truncated, non-empty file behind, so the file's size proves nothing. mkvmerge exits 1 for warnings only (pass ``max_ok_exit_code=1``)."""
+    result_json = result_json or {}
+    exit_code = result_json.get("exit_code")
+    return bool(result_json.get("timed_out")) or (isinstance(exit_code, int) and not 0 <= exit_code <= max_ok_exit_code)
+
+
+def _discard_output(path: str) -> None:
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
 def _video_stream_state(path: str) -> bool | None:
     """True/False: the file has/lacks a video stream; None when it can't be probed (never a reason to act)."""
     try:
@@ -859,6 +882,8 @@ def _video_stream_state(path: str) -> bool | None:
 
 def _ensure_video_kept(video_path: str, out_path: str, result_json: dict | None) -> dict | None:
     """Ensure that the output file still has a video stream after muxing. If not, delete the output and return a flagged result."""
+    if not out_path:  # the mux already failed and its output was discarded
+        return result_json
     if _video_stream_state(video_path) is not True or _video_stream_state(out_path) is not False:
         return result_json
 
@@ -1090,9 +1115,13 @@ def _join_media_ffmpeg(
         raise
 
     _exit_code = result_json.get("exit_code")
-    if _exit_code:
+    if _mux_failed(result_json):
         _tail = "\n".join(result_json.get("last_lines") or [])
-        logger.error(f"Join Media ffmpeg exited with code {_exit_code} -> {out_path} in {time.monotonic() - _join_t0:.1f}s\n{_tail}")
+        _why = "timed out" if result_json.get("timed_out") else f"exited with code {_exit_code}"
+        logger.error(f"Join Media ffmpeg {_why} -> {out_path} in {time.monotonic() - _join_t0:.1f}s, discarding the partial output\n{_tail}")
+        # An empty path makes the caller treat the merge as failed and keep the temporary tracks.
+        _discard_output(out_path)
+        out_path = ""
     else:
         logger.info(f"Join Media finished -> {out_path} in {time.monotonic() - _join_t0:.1f}s")
     
@@ -1142,7 +1171,14 @@ def _join_media_mkvmerge(
     _join_t0 = time.monotonic()
     print("")
     result_json = capture_ffmpeg_real_time(cmd, "[yellow]MKVMERGE [cyan]Join media", total_duration, output_path=out_path)
-    logger.info(f"Join Media (mkvmerge) finished -> {out_path} in {time.monotonic() - _join_t0:.1f}s")
+    if _mux_failed(result_json, max_ok_exit_code=1):
+        _tail = "\n".join(result_json.get("last_lines") or [])
+        _why = "timed out" if result_json.get("timed_out") else f"exited with code {result_json.get('exit_code')}"
+        logger.error(f"Join Media (mkvmerge) {_why} -> {out_path} in {time.monotonic() - _join_t0:.1f}s, discarding the partial output\n{_tail}")
+        _discard_output(out_path)
+        out_path = ""
+    else:
+        logger.info(f"Join Media (mkvmerge) finished -> {out_path} in {time.monotonic() - _join_t0:.1f}s")
 
     if chapter_file:
         try:

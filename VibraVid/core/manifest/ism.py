@@ -259,7 +259,8 @@ class ISMParser:
                 except ValueError:
                     pass
 
-            for _ in range(repeat + 1):
+            # MS-SSTR: r is the total number of contiguous fragments (not DASH's "extra repeats"); absent or 0 means one
+            for _ in range(max(repeat, 1)):
                 timeline.append(current_time)
                 current_time += d
 

@@ -7,8 +7,10 @@
 
 <section class="cn-hero cn-series-hero" id="cn-hero">
 	<div class="cn-hero-art" style="--cn-h1:{{ series.p1 }};--cn-h2:{{ series.p2 }}"></div>
-	<div class="cn-hero-photo" id="cn-hero-photo"
-	     style="{% if series.backdrop %}background-image:url('{{ series.backdrop }}');{% else %}display:none;{% endif %}"></div>
+	{# An <img>, not a CSS url(): autoescaping does not protect a CSS string inside style="". #}
+	<div class="cn-hero-photo" id="cn-hero-photo"{% if not series.backdrop %} hidden{% endif %}>
+		<img {% if series.backdrop %}src="{{ series.backdrop }}"{% else %}hidden{% endif %} alt="" decoding="async" referrerpolicy="no-referrer">
+	</div>
 	<div class="cn-hero-veil"></div>
 
 	<div class="cn-hero-in">
@@ -40,7 +42,7 @@
 				<input type="hidden" name="source_alias" value="{{ series.source_alias }}">
 				<input type="hidden" name="item_payload" value="{{ series.item_payload }}">
 				<input type="hidden" name="download_type" value="full_series">
-				<button class="cn-cta" type="submit" id="cn-all"
+				<button class="cn-cta is-ghost" type="submit" id="cn-all"
 				        {% if not seasons %}disabled{% endif %}>
 					<svg class="cn-ico is-sm" aria-hidden="true"><use href="#i-download"/></svg>Download all
 				</button>
@@ -108,8 +110,8 @@
 		<input type="hidden" name="selected_seasons" id="cn-seasons-input" value="">
 	</form>
 
-	<div class="cn-tray" id="cn-tray">
-		<span class="cn-tray-txt" id="cn-tray-txt"></span>
+	<div class="cn-tray" id="cn-tray" inert>
+		<span class="cn-tray-txt" id="cn-tray-txt" role="status"></span>
 		<button class="cn-cta is-sm" type="button" id="cn-seasons-btn">Download</button>
 	</div>
 	{% endif %}
@@ -203,10 +205,11 @@
 					{% endfor %}
 				</div>
 
-				<button class="cn-cta cn-season-go" type="submit"
-				        id="cn-go-{{ season.number }}">
-					Download selected
-				</button>
+				<div class="cn-row cn-season-go">
+					<button class="cn-cta" type="submit" id="cn-go-{{ season.number }}" disabled
+					        aria-describedby="cn-go-note-{{ season.number }}">Download selected</button>
+					<p class="cn-note" id="cn-go-note-{{ season.number }}">Select at least one episode to download.</p>
+				</div>
 			</form>
 		</section>
 	{% empty %}
@@ -236,6 +239,8 @@
 		seasonPicks.forEach(function (c) { if (c.checked) chosen.push(c.value); });
 		if (tray) {
 			tray.classList.toggle("is-show", chosen.length > 0);
+			// Hidden by transform/opacity only: inert keeps its buttons out of the tab order too.
+			tray.inert = !chosen.length;
 			trayTxt.textContent = chosen.length
 				? chosen.length + " season" + (chosen.length === 1 ? "" : "s") + " selected (" + chosen.join(", ") + ")"
 				: "";
@@ -252,7 +257,7 @@
 		seasonsBtn.addEventListener("click", function () {
 			var chosen = refreshTray();
 			if (!chosen.length) return;
-			if (!confirm("Download seasons " + chosen.join(", ") + "?")) return;
+			if (!confirm(t("Download seasons {list}?").replace("{list}", chosen.join(", ")))) return;
 			el("cn-seasons-input").value = chosen.join(",");
 			el("cn-seasons-form").requestSubmit();
 		});
@@ -297,17 +302,15 @@
 	}
 
 	var heroPhoto = el("cn-hero-photo");
+	var heroImage = heroPhoto && heroPhoto.querySelector("img");
 	var seriesBackdrop = "{{ series.backdrop|default:''|escapejs }}";
+	if (heroImage) heroImage.addEventListener("error", function () { heroPhoto.hidden = true; });
 
 	function setHeroImage(url) {
-		if (!heroPhoto) return;
+		if (!heroImage) return;
 		var chosen = url || seriesBackdrop;
-		if (chosen) {
-			heroPhoto.style.backgroundImage = "url('" + chosen + "')";
-			heroPhoto.style.display = "";
-		} else {
-			heroPhoto.style.display = "none";
-		}
+		heroPhoto.hidden = heroImage.hidden = !chosen;
+		if (chosen && heroImage.getAttribute("src") !== chosen) heroImage.src = chosen;
 	}
 
 	function activateSeason(number) {
@@ -362,9 +365,13 @@
 			.forEach(function (c) { chosen.push(c.value); });
 
 		el("cn-eps-" + season).value = chosen.length ? compress(chosen) : "";
-		el("cn-go-" + season).textContent = chosen.length
+		var go = el("cn-go-" + season);
+		go.textContent = chosen.length
 			? "Download " + chosen.length + " episode" + (chosen.length === 1 ? "" : "s")
 			: "Download selected";
+		// Disabled until something is picked; the note beside it says why.
+		go.disabled = !chosen.length;
+		el("cn-go-note-" + season).hidden = chosen.length > 0;
 	}
 
 	document.querySelectorAll(".cn-ep-pick").forEach(function (c) {
@@ -392,10 +399,7 @@
 	document.querySelectorAll('form[id^="cn-form-"]').forEach(function (form) {
 		form.addEventListener("submit", function (e) {
 			var field = this.querySelector('input[name="selected_episodes"]');
-			if (field && !field.value.trim()) {
-				e.preventDefault();
-				alert("Select at least one episode.");
-			}
+			if (field && !field.value.trim()) e.preventDefault();
 		});
 	});
 

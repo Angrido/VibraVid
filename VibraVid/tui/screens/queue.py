@@ -6,6 +6,7 @@
 import logging
 import os
 import shlex
+import signal
 import subprocess
 import sys
 import threading
@@ -28,6 +29,7 @@ from VibraVid.cli.command.queue import (
     _QueueLock,
     _save_queue,
     clear,
+    clear_completed,
     enqueue_argv,
     queue_item_label,
     remove,
@@ -37,6 +39,14 @@ from VibraVid.tui.widgets.custom_footer import CustomFooter
 from VibraVid.tui.widgets.topbar import TopBar
 
 logger = logging.getLogger(__name__)
+
+
+def _queue_error(exc: BaseException) -> str:
+    """Reason for a failed queue operation. The CLI commands end with SystemExit (an item is running, the queue is
+    busy) after printing the reason to a terminal the TUI hides; caught as Exception only, it closed the TUI."""
+    if isinstance(exc, SystemExit):
+        return "an item is running or the queue is busy"
+    return str(exc)
 
 
 class EnqueueModal(ModalScreen[str | None]):
@@ -126,7 +136,9 @@ class QueueScreen(Screen):
             self._refresh_timer.stop()
         if self._is_worker_running:
             self._stop.set()
-            self._kill_child()
+            # taskkill can take seconds: never block the UI thread on it. Not a daemon thread, so an
+            # exiting app still waits for the kill instead of leaving the job running.
+            threading.Thread(target=self._kill_child, name="queue-kill-child").start()
 
     @staticmethod
     def _log_path(item_id: str, create: bool = False) -> str:
@@ -303,7 +315,11 @@ class QueueScreen(Screen):
             if sys.platform == "win32":
                 subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True, timeout=10)
             else:
-                proc.terminate()
+                # The child leads its own session (start_new_session): signal the whole group, so
+                # velora/ffmpeg are not orphaned.
+                os.killpg(proc.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass  # already gone
         except Exception:
             logger.exception("Could not stop queue child process")
 
@@ -335,6 +351,7 @@ class QueueScreen(Screen):
                             stdout=log,
                             stderr=subprocess.STDOUT,
                             env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                            start_new_session=sys.platform != "win32",  # its own process group, see _kill_child
                         )
                         if self._stop.is_set():  # left the screen between spawn and now
                             self._kill_child()
@@ -381,8 +398,8 @@ class QueueScreen(Screen):
         try:
             remove(item_id)
             self.app.notify(f"Removed item '{item_id}'", severity="information")
-        except Exception as e:
-            self.app.notify(f"Could not remove item: {e}", severity="error")
+        except (Exception, SystemExit) as e:
+            self.app.notify(f"Could not remove item: {_queue_error(e)}", severity="error")
         self._refresh_queue()
 
     @on(Button.Pressed, "#retry-btn")
@@ -406,8 +423,8 @@ class QueueScreen(Screen):
                         break
                 _save_queue(path, data)
             self.app.notify(f"Reset item '{item_id}' to pending", severity="information")
-        except Exception as e:
-            self.app.notify(f"Could not retry item: {e}", severity="error")
+        except (Exception, SystemExit) as e:
+            self.app.notify(f"Could not retry item: {_queue_error(e)}", severity="error")
         self._refresh_queue()
 
     @on(Button.Pressed, "#clear-queue-btn")
@@ -415,8 +432,17 @@ class QueueScreen(Screen):
         try:
             clear()
             self.app.notify("Cleared all queues", severity="information")
-        except Exception as e:
-            self.app.notify(f"Could not clear queue: {e}", severity="error")
+        except (Exception, SystemExit) as e:
+            self.app.notify(f"Could not clear queue: {_queue_error(e)}", severity="error")
+        self._refresh_queue()
+
+    @on(Button.Pressed, "#queue-btn-clear")
+    def _on_clear_completed(self) -> None:
+        try:
+            removed = clear_completed()
+            self.app.notify(f"Removed {removed} completed item(s)", severity="information")
+        except (Exception, SystemExit) as e:
+            self.app.notify(f"Could not clear completed items: {_queue_error(e)}", severity="error")
         self._refresh_queue()
 
     @on(Button.Pressed, "#add-command-btn")
@@ -435,7 +461,7 @@ class QueueScreen(Screen):
         try:
             item = enqueue_argv(argv)
             self.app.notify(f"Enqueued job {item['id']}", severity="information")
-        except Exception as e:
-            self.app.notify(f"Enqueue failed: {e}", severity="error")
+        except (Exception, SystemExit) as e:
+            self.app.notify(f"Enqueue failed: {_queue_error(e)}", severity="error")
 
         self._refresh_queue()

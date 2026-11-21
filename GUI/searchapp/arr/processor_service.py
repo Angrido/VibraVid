@@ -80,37 +80,7 @@ class ArrProcessorService:
         return reduced
 
     def _filter_sonarr(self, elem: dict) -> bool:
-        series_title = elem["series"]["title"]
-        season_num = elem["seasonNumber"]
-        tag_ids = elem["series"]["tags"]
-
-        if not self._check_tags_validity(series_title, tag_ids):
-            return False
-
-        tag_names = [self._sonarr_tags.get(t, "") for t in tag_ids]
-
-        # Hold / Pause
-        if "hold" in tag_names or "pausa" in tag_names:
-            key = f"{series_title}_hold"
-            if key not in self._logged_skipped:
-                logger.info(f"'{series_title}' in PAUSA (remove 'hold' tag to resume)")
-                self._logged_skipped.add(key)
-            return False
-
-        # Skip specific seasons (e.g. tag 'skip-s1')
-        target_tag = f"skip-s{season_num}"
-        if target_tag in tag_names:
-            key = f"{series_title}_skip_{season_num}"
-            if key not in self._logged_skipped:
-                logger.info(f"Season {season_num} of '{series_title}' skipped (tag {target_tag})")
-                self._logged_skipped.add(key)
-            return False
-
-        # Always skip Season 0 (Specials)
-        if season_num == 0:
-            return False
-
-        return True
+        return self.allowed_by_tags(elem["series"]["title"], elem["series"]["tags"], "sonarr", elem["seasonNumber"])
 
     def _reduce_sonarr(self, base: list[dict], elem: dict) -> None:
         serie = next((s for s in base if s["id"] == elem["series"]["id"]), None)
@@ -174,23 +144,55 @@ class ArrProcessorService:
         return valid
 
     def _filter_radarr(self, elem: dict) -> bool:
-        title = elem["title"]
-        tag_ids = elem.get("tags", [])
+        return self.allowed_by_tags(elem["title"], elem.get("tags", []), "radarr")
 
+    # ── utilities ────────────────────────────────────────
+
+    def allowed_by_tags(self, title: str, tag_ids: list, source: str, season_num: int | None = None) -> bool:
+        """Tag rules for polling and every webhook alike: whitelist/blacklist, hold/pausa, skip-sN, no specials.
+
+        Without ``season_num`` only the title-wide rules apply (a series is then checked again per season).
+        """
         if not self._check_tags_validity(title, tag_ids):
             return False
 
-        tag_names = [self._radarr_tags.get(t, "") for t in tag_ids]
+        tag_names = self._tag_names(source, tag_ids)
 
         if "hold" in tag_names or "pausa" in tag_names:
-            if title not in self._logged_skipped:
+            key = f"{title}_hold"
+            if key not in self._logged_skipped:
                 logger.info(f"'{title}' in PAUSA (remove 'hold' tag to resume)")
-                self._logged_skipped.add(title)
+                self._logged_skipped.add(key)
             return False
 
-        return True
+        if season_num is None:
+            return True
 
-    # ── utilities ────────────────────────────────────────
+        # Skip specific seasons (e.g. tag 'skip-s1')
+        target_tag = f"skip-s{season_num}"
+        if target_tag in tag_names:
+            key = f"{title}_skip_{season_num}"
+            if key not in self._logged_skipped:
+                logger.info(f"Season {season_num} of '{title}' skipped (tag {target_tag})")
+                self._logged_skipped.add(key)
+            return False
+
+        # Always skip Season 0 (Specials)
+        return season_num != 0
+
+    def _tag_names(self, source: str, tag_ids: list) -> list[str]:
+        """Labels of ``tag_ids``; webhooks never run get_missing_items, so the map is loaded on first use."""
+        if not tag_ids:
+            return []
+        if source == "sonarr":
+            if not self._sonarr_tags and self.sonarr:
+                self._sonarr_tags = self.sonarr.get_tags_map() or {}
+            tags_map = self._sonarr_tags
+        else:
+            if not self._radarr_tags and self.radarr:
+                self._radarr_tags = self.radarr.get_tags_map() or {}
+            tags_map = self._radarr_tags
+        return [tags_map.get(t, "") for t in tag_ids]
 
     def _check_tags_validity(self, title: str, item_tags: list) -> bool:
         item_has_active = any(t in self.active_tag_ids for t in item_tags)

@@ -44,8 +44,10 @@
 			<svg class="cn-ico is-sm" aria-hidden="true"><use href="#i-stop"/></svg>Stop all downloads
 		</button>
 	</div>
-	<div class="cn-lines" id="cn-reel-active" aria-live="polite" aria-busy="true"><div class="cn-skel" aria-hidden="true"></div></div>
+	{# Not a live region: rows change every second. Starts and ends are announced in #cn-dl-announce. #}
+	<div class="cn-lines" id="cn-reel-active" aria-busy="true"><div class="cn-skel" aria-hidden="true"></div></div>
 	<p class="cn-empty" id="cn-empty-active" hidden>No downloads running.</p>
+	<p class="cn-sr" id="cn-dl-announce" role="status" data-no-tr></p>
 </section>
 
 <section class="cn-strip cn-manual-section" id="cn-manual-section" hidden aria-labelledby="cn-h-tracks">
@@ -235,6 +237,33 @@
             out.join("") + '</div>' : "";
     }
 
+	function factsText(item) {
+		var elapsed = elapsedText(item.start_time);
+		return [item.site, elapsed && t("{time} elapsed").replace("{time}", elapsed)].filter(Boolean).join(" · ");
+	}
+	function streamsText(item) {
+		var tasks = item.tasks || {};
+		return Object.keys(tasks).map(function (k) {
+			var raw = tasks[k].display_label || tasks[k].label || k.replace(/_/g, " ");
+			// Strip only known Rich style tags (color/bold), never bracketed content
+			// like "[DEFAULT]"/"[FORCED]" which is part of the label itself.
+			var name = raw
+				.replace(/\[\/?(?:bold\s+)?(?:yellow|white|blue|cyan|red|green|magenta|dim)\]/gi, "")
+				.replace(/\\\[/g, "[")
+				.trim() || k.replace(/_/g, " ");
+			return name + " " + (tasks[k].progress || 0).toFixed(0) + "%";
+		}).join(" · ");
+	}
+	function rightText(item) {
+		return (item.size ? item.size + " · " : "") + (item.speed || "") + " · " + item.pctText + "%";
+	}
+	// What changes the row's markup (as opposed to its text): only then is it rebuilt.
+	function rowShape(item) {
+		var key = item.series_name || item.title || item.name;
+		return [item.poster || posterCache[key] || "", item.title || key, item.path || "",
+			Object.keys(item.tasks || {}).join(","), JSON.stringify(item.selected_tracks || [])].join("|");
+	}
+
 	function activeRowInner(item, downloadId) {
 		var key = item.series_name || item.title || item.name;
 		var d = duotone(key);
@@ -242,40 +271,25 @@
 		var art = url
 			? '<img src="' + esc(url) + '" alt="" loading="lazy" decoding="async" onerror="this.remove()">'
 			: "";
-		var elapsed = elapsedText(item.start_time);
-		var facts = [item.site, elapsed && (elapsed + " elapsed")].filter(Boolean).join(" · ");
-		var tasks = item.tasks || {};
-		var taskNames = Object.keys(tasks);
-		var streams = taskNames.length > 0
-			? taskNames.map(function (k) {
-				var raw = tasks[k].display_label || tasks[k].label || k.replace(/_/g, " ");
-				// Strip only known Rich style tags (color/bold), never bracketed content
-				// like "[DEFAULT]"/"[FORCED]" which is part of the label itself.
-				var name = raw
-					.replace(/\[\/?(?:bold\s+)?(?:yellow|white|blue|cyan|red|green|magenta|dim)\]/gi, "")
-					.replace(/\\\[/g, "[")
-					.trim() || k.replace(/_/g, " ");
-				return esc(name) + " " + (tasks[k].progress || 0).toFixed(0) + "%";
-			}).join(" · ")
-			: "";
+		var streams = streamsText(item);
 		return '<span class="cn-thumb" style="--cn-p1:' + d[0] + ';--cn-p2:' + d[1] + '">' +
 				art + '<b>' + esc(titleize(key).slice(0, 1).toUpperCase()) + '</b>' +
 			'</span>' +
 			'<span class="cn-grow">' +
 				'<span class="cn-t">' + esc(titleize(item.title || key)) + '</span>' +
-				'<span class="cn-s">' + esc(facts) + '</span>' +
+				'<span class="cn-s cn-ln-facts">' + esc(factsText(item)) + '</span>' +
 				(item.path ? '<span class="cn-s cn-ln-path">' + esc(item.path) + '</span>' : "") +
-				'<span class="cn-ln-bar"><i style="width:' + item.pctText + '%"></i></span>' +
-				(streams ? '<span class="cn-s">' + streams + '</span>' : "") +
+				'<span class="cn-ln-bar"><i style="--p: ' + item.pctText + '%"></i></span>' +
+				(streams ? '<span class="cn-s cn-ln-streams">' + esc(streams) + '</span>' : "") +
                 selectedTrackFacts(item) +
 			'</span>' +
-			'<span class="cn-r">' + (item.size ? esc(item.size) + ' · ' : '') + esc(item.speed || '') + ' · ' + item.pctText + '%</span>' +
+			'<span class="cn-r">' + esc(rightText(item)) + '</span>' +
 			'<button class="cn-cta is-ghost is-sm" type="button" data-stop="' + esc(downloadId) + '"' +
 				(isStopping(item) ? ' disabled' : '') + '>' + (isStopping(item) ? 'Stopping...' : stopLabel(item)) + '</button>';
 	}
 
-	function activeRow(item, downloadId) {
-		return '<div class="cn-ln cn-ln-active" data-id="' + esc(downloadId) + '"' +
+	function activeRow(item, downloadId, shape) {
+		return '<div class="cn-ln cn-ln-active" data-id="' + esc(downloadId) + '" data-shape="' + esc(shape) + '"' +
 			(item.path ? ' title="' + esc(item.path) + '"' : "") + '>' +
 			activeRowInner(item, downloadId) +
 		'</div>';
@@ -329,9 +343,9 @@
 		var el = node.querySelector(selector);
 		if (el && el.textContent !== text) el.textContent = text;
 	}
-	function setWidth(node, selector, percent) {
+	function setProgress(node, selector, percent) {
 		var el = node.querySelector(selector);
-		if (el) el.style.width = percent + "%";
+		if (el) el.style.setProperty("--p", percent + "%");
 	}
 
 	var heroId = null;
@@ -447,7 +461,7 @@
 
 		setHTML(document.getElementById("cn-hero-pct"), p.toFixed(0) + "<span>%</span>");
 		document.getElementById("cn-hero-of").textContent = d.size || "";
-		document.getElementById("cn-hero-bar").style.width = p + "%";
+		document.getElementById("cn-hero-bar").style.setProperty("--p", p + "%");
 		document.getElementById("cn-hero-meter").setAttribute("aria-valuenow", p.toFixed(0));
 
 		var facts = [];
@@ -469,16 +483,13 @@
         pendingStops[downloadId] = true;
         button.disabled = true;
         button.textContent = "Stopping...";
-        fetch(URL_KILL, {
+        CN.fetchJSON(URL_KILL, {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF },
             body: JSON.stringify({ download_id: downloadId })
-        }).then(function (response) {
-            if (!response.ok) throw new Error("Stop failed (HTTP " + response.status + "). Please retry.");
-            return response.json();
         }).then(function (result) {
             if (result.status !== "success") throw new Error(result.message || "Stop failed. Please retry.");
-            return refresh();
+            refreshNow();
         }).catch(function (error) {
             delete pendingStops[downloadId];
             button.disabled = false;
@@ -495,32 +506,34 @@
         if (button) requestStop(button.dataset.stop, button);
     });
 
-    function bindAction(id, url) {
+    // Both run at once and cannot be undone: ask first, like "Clear queued".
+    function bindAction(id, url, ask) {
         document.getElementById(id).addEventListener("click", function () {
             var button = this;
-            button.disabled = true;
-            fetch(url, { method: "POST", headers: { "X-CSRFToken": CSRF } })
-                .then(function (response) {
-                    if (!response.ok) throw new Error("Action failed. Please retry.");
-                    return refresh();
-                })
-                .catch(function (error) { window.alert(error.message); })
-                .finally(function () { button.disabled = false; });
+            CN.confirm(ask).then(function (ok) {
+                if (!ok) return;
+                button.disabled = true;
+                CN.fetchJSON(url, { method: "POST", headers: { "X-CSRFToken": CSRF } })
+                    .then(refreshNow)
+                    .catch(function (error) { window.alert(error.status === 401 ? error.message : "Action failed. Please retry."); })
+                    .finally(function () { button.disabled = false; });
+            });
         });
     }
-    bindAction("cn-stop-all", URL_STOP_ALL);
-    bindAction("cn-clear-history", URL_CLEAR_HISTORY);
+    bindAction("cn-stop-all", URL_STOP_ALL, {
+        title: "Stop all downloads?", confirm: "Stop all",
+        text: "Running downloads stop now and the queue is emptied."
+    });
+    bindAction("cn-clear-history", URL_CLEAR_HISTORY, {
+        title: "Clear download history?", confirm: "Clear history",
+        text: "Recent results are removed from this page. Downloaded files are not touched."
+    });
 
 	function queuePost(url, payload) {
-		return fetch(url, {
+		return CN.fetchJSON(url, {
 			method: "POST",
 			headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF },
 			body: JSON.stringify(payload || {})
-		}).then(function (response) {
-			return response.json().then(function (data) {
-				if (!response.ok) throw new Error(data.message || "Queue request failed");
-				return data;
-			});
 		});
 	}
 
@@ -533,7 +546,7 @@
 		queuePost(URL_RETRY, { download_id: btn.dataset.retryDownload })
 			.then(function () {
 				btn.textContent = t("Queued");
-				return refresh();
+				refreshNow();
 			})
 			.catch(function (error) {
 				btn.disabled = false;
@@ -548,20 +561,25 @@
 		e.stopPropagation();
 		btn.disabled = true;
 		queuePost(URL_REMOVE_QUEUE, { download_id: btn.dataset.removeQueued })
-			.then(refresh)
+			.then(refreshNow)
 			.catch(function () {
 				btn.disabled = false;
-				refresh();
+				refreshNow();
 			});
 	});
 
 	document.getElementById("cn-clear-queue").addEventListener("click", function () {
 		var btn = this;
-		if (!window.confirm("Remove all queued downloads that have not started yet?")) return;
-		btn.disabled = true;
-		queuePost(URL_CLEAR_QUEUE, {})
-			.then(refresh)
-			.finally(function () { btn.disabled = false; });
+		CN.confirm({
+			title: "Clear the queue?", confirm: "Clear queued",
+			text: "Remove all queued downloads that have not started yet?"
+		}).then(function (ok) {
+			if (!ok) return;
+			btn.disabled = true;
+			queuePost(URL_CLEAR_QUEUE, {})
+				.then(refreshNow, refreshNow)
+				.finally(function () { btn.disabled = false; });
+		});
 	});
 
     function renderPendingTracks(requests) {
@@ -630,19 +648,43 @@
             download_id: container.dataset.downloadId,
             token: container.dataset.token,
             selected: selected
-        }).then(refresh).catch(function (error) {
+        }).then(refreshNow).catch(function (error) {
             window.alert(error.message);
             button.disabled = false;
         });
     });
 
+	// Screen readers hear when a download starts or ends, not every progress tick.
+	var announcer = document.getElementById("cn-dl-announce");
+	var knownActive = null;
+	function announce(active, hist) {
+		var now = {};
+		active.forEach(function (d, i) { now[d.id || tileId(d, "a", i)] = titleize(d.title || d.series_name || d.name || ""); });
+		if (knownActive) {
+			var lines = [];
+			Object.keys(now).forEach(function (id) {
+				if (!(id in knownActive)) lines.push(t("Download started: {title}").replace("{title}", now[id]));
+			});
+			Object.keys(knownActive).forEach(function (id) {
+				if (id in now) return;
+				var done = hist.filter(function (h) { return h.id === id; })[0];
+				lines.push(t("Download ended: {title} ({status})").replace("{title}", knownActive[id])
+					.replace("{status}", t(done ? outcome(done).label : "Stopped")));
+			});
+			if (lines.length) announcer.textContent = lines.join(". ");
+		}
+		knownActive = now;
+	}
+
+	var busyPage = false;
 	function refresh() {
-		return fetch(URL_DOWNLOADS)
-			.then(function (r) { return r.json(); })
+		return CN.fetchJSON(URL_DOWNLOADS)
 			.then(function (data) {
 				var active = data.active || [];
 				var queue  = data.scheduled || [];
 				var hist   = data.history || [];
+				busyPage = active.length > 0 || queue.length > 0 || (data.pending_tracks || []).length > 0;
+				announce(active, hist);
                 renderPendingTracks(data.pending_tracks || []);
 				var clearQueue = document.getElementById("cn-clear-queue");
 
@@ -665,18 +707,28 @@
 						id: tileId(d, "a", i),
 						sig: status + "|" + !!isStopping(d) + "|" + stopLabel(d) + "|" + (d.quality || "") + "|" + p.toFixed(0) + "|" + (d.speed || "") + "|" + elapsedText(d.start_time) + "|" + JSON.stringify(d.tasks || {}) + "|" + JSON.stringify(d.selected_tracks || []),
 						html: function () {
-							return activeRow(d, downloadId);
+							return activeRow(d, downloadId, rowShape(d));
 						},
 						patch: function (node) {
                             // Keep the button attached: replacing it during a polling
                             // update can swallow a click between pointer down and up.
-                            var holder = document.createElement("div");
-                            holder.innerHTML = activeRowInner(d, downloadId);
-                            [".cn-thumb", ".cn-grow", ".cn-r"].forEach(function (selector) {
-                                var current = node.querySelector(selector);
-                                var next = holder.querySelector(selector);
-                                if (current && next) current.innerHTML = next.innerHTML;
-                            });
+                            var shape = rowShape(d);
+                            if (node.dataset.shape !== shape) {
+                                var holder = document.createElement("div");
+                                holder.innerHTML = activeRowInner(d, downloadId);
+                                [".cn-thumb", ".cn-grow", ".cn-r"].forEach(function (selector) {
+                                    var current = node.querySelector(selector);
+                                    var next = holder.querySelector(selector);
+                                    if (current && next) current.innerHTML = next.innerHTML;
+                                });
+                                node.dataset.shape = shape;
+                            } else {
+                                // Same markup: patch only the text and the bar that move every tick.
+                                setText(node, ".cn-ln-facts", factsText(d));
+                                setText(node, ".cn-ln-streams", streamsText(d));
+                                setText(node, ".cn-r", rightText(d));
+                                setProgress(node, ".cn-ln-bar i", d.pctText);
+                            }
                             var button = node.querySelector("[data-stop]");
                             if (button) {
                                 button.disabled = !!isStopping(d);
@@ -813,12 +865,11 @@
 		}, { passive: false });
 	});
 
-	refresh();
-	var timer = setInterval(refresh, 1000);
-	document.addEventListener("visibilitychange", function () {
-		clearInterval(timer);
-		if (!document.hidden) { refresh(); timer = setInterval(refresh, 1000); }
-	});
+	// About once a second while something runs, every 5 s when idle; never two requests at once,
+	// nothing while the tab is hidden (CN.poll). Actions call refreshNow() for an immediate update.
+	var poller = CN.poll(refresh, function () { return busyPage ? 1000 : 5000; });
+	function refreshNow() { poller.start(); }
+	refreshNow();
 })();
 </script>
 {% endblock %}

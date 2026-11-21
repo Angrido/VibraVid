@@ -251,8 +251,10 @@ def manage_selection(cmd_insert: str, max_count: int) -> list[int]:
                     # Handle end part (could be numeric or '*' or empty for max_count)
                     if end.isnumeric():
                         end = int(end)
-                    else:
+                    elif end in ("", "*"):
                         end = max_count
+                    else:
+                        raise ValueError  # a typo such as "1-5x" must not select everything up to the end
 
                     list_selection.extend(list(range(start, end + 1)))
                 elif part.isnumeric():
@@ -469,21 +471,14 @@ def validate_selection(list_season_select: list[int], available_seasons: list[in
         - List[int]: Adjusted list of valid season numbers.
     """
     while True:
-        try:
-            # Remove any seasons not in the available seasons
-            valid_seasons = [season for season in list_season_select if season in available_seasons]
-
-            # If the list is empty, the input was completely invalid
-            if not valid_seasons:
-                input_seasons = msg.ask(f"[red]Enter valid season numbers ({', '.join(map(str, available_seasons))})")
-                list_season_select = list(map(int, input_seasons.split(",")))
-                continue
-
+        # Remove any seasons not in the available seasons
+        valid_seasons = [season for season in list_season_select if season in available_seasons]
+        if valid_seasons:
             return valid_seasons
 
-        except ValueError:
-            input_seasons = input(f"Enter valid season numbers ({', '.join(map(str, available_seasons))}): ")
-            list_season_select = list(map(int, input_seasons.split(",")))
+        # The input was completely invalid: manage_selection asks again until the answer parses (ranges included).
+        input_seasons = msg.ask(f"[red]Enter valid season numbers ({', '.join(map(str, available_seasons))})")
+        list_season_select = manage_selection(input_seasons, max(available_seasons, default=0))
 
 
 def display_seasons_list(seasons_manager) -> str:

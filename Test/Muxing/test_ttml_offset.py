@@ -101,3 +101,44 @@ def test_exact_offsets_rebase_zero_restarting_blocks(tmp_path):
         ("00:00:32,000", "00:00:34,000"),
         ("00:01:05,000", "00:01:07,000"),
     ]
+
+
+def _late_forced_track(tmp_path, first_cue: str = "01:12:30.000", end: str = "01:12:33.000"):
+    src = tmp_path / "forced.ttml"
+    src.write_bytes(_tt_block([(first_cue, end, "forced narrative")]))
+    return src, tmp_path / "forced.srt"
+
+
+def test_late_first_cue_inside_the_media_is_kept(tmp_path):
+    # A forced-narrative track whose only cue is at 01:12:30 of a 1h30 film is correct as it is.
+    src, out = _late_forced_track(tmp_path)
+
+    assert convert_ttml_to_format(str(src), str(out), "srt", media_duration=5400.0)
+    assert _cue_times(out.read_text(encoding="utf-8")) == [("01:12:30,000", "01:12:33,000")]
+
+
+def test_first_cue_beyond_the_media_is_rebased(tmp_path):
+    # Wall-clock timestamps (10h in) on a 1h30 film: only a rebase can put them on the media timeline.
+    src, out = _late_forced_track(tmp_path, "10:00:05.000", "10:00:07.000")
+
+    assert convert_ttml_to_format(str(src), str(out), "srt", media_duration=5400.0)
+    assert _cue_times(out.read_text(encoding="utf-8")) == [("00:00:00,000", "00:00:02,000")]
+
+
+def test_without_a_duration_a_late_first_cue_is_still_rebased(tmp_path):
+    src, out = _late_forced_track(tmp_path)
+
+    assert convert_ttml_to_format(str(src), str(out), "srt")
+    assert _cue_times(out.read_text(encoding="utf-8")) == [("00:00:00,000", "00:00:03,000")]
+
+
+def test_join_passes_the_video_duration_to_the_ttml_conversion(tmp_path, monkeypatch):
+    from VibraVid.core.muxing import merge
+
+    src, _ = _late_forced_track(tmp_path)
+    monkeypatch.setattr(merge, "FORCE_SUBTITLE", "auto")
+    monkeypatch.setattr(merge, "get_video_duration", lambda _path: 5400.0)
+    monkeypatch.setattr(merge, "get_subtitle_duration", lambda _path: None)
+
+    processed = merge._prepare_subtitle_tracks(str(tmp_path / "video.mp4"), [{"path": str(src), "language": "ita"}])
+    assert _cue_times(open(processed[0]["path"], encoding="utf-8").read()) == [("01:12:30,000", "01:12:33,000")]

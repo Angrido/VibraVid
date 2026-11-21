@@ -1,5 +1,6 @@
 # 29.01.24
 
+import copy
 import json
 import logging
 import os
@@ -503,10 +504,11 @@ class ConfigManager:
 
         self._config_data.clear()
         self._config_data.update(config_data)
+        self._runtime_values = {}
 
         env_root = os.environ.get("VIBRAVID_OUTPUT_ROOT")
         if env_root:
-            self._config_data.setdefault("OUTPUT", {})["root_path"] = env_root
+            self._set_runtime_value("OUTPUT", "root_path", env_root)
             logger.info(f"OUTPUT.root_path overridden via VIBRAVID_OUTPUT_ROOT={env_root}")
 
         self._apply_termux_defaults()
@@ -520,7 +522,7 @@ class ConfigManager:
 
         root_path = self._config_data.get("OUTPUT", {}).get("root_path", "Video")
         if root_path == "Video" or not root_path.startswith("/"):
-            self._config_data.setdefault("OUTPUT", {})["root_path"] = "/sdcard/Movies/VibraVid"
+            self._set_runtime_value("OUTPUT", "root_path", "/sdcard/Movies/VibraVid")
             logger.info("OUTPUT.root_path defaulted to /sdcard/Movies/VibraVid for Termux compatibility")
 
     def _load_login(self) -> None:
@@ -923,6 +925,40 @@ class ConfigManager:
             self.reload_login_only()
         return text
 
+    def _set_runtime_value(self, section: str, key: str, value: Any) -> None:
+        """Use *value* in memory only (environment, platform default, CLI flag): save_config() keeps the file's own value."""
+        if (section, key) in self._runtime_values:  # a second override must not record the first one as the file's value
+            had_section, file_value, _ = self._runtime_values[(section, key)]
+        else:
+            section_data = self._config_data.get(section)
+            had_section = isinstance(section_data, dict)
+            file_value = section_data.get(key, _MISSING) if had_section else _MISSING
+        self._runtime_values[(section, key)] = (had_section, file_value, value)
+        self._config_data.setdefault(section, {})[key] = value
+
+    def set_session_value(self, section: str, key: str, value: Any) -> None:
+        """Apply *value* for this process only, e.g. a CLI flag: config.toml keeps its own value whenever it is saved."""
+        self._set_runtime_value(section, key, value)
+        self.config.set_key(section, key, value)
+
+    def _config_to_save(self) -> dict:
+        """The config as config.toml should hold it: each runtime value still in place gives way to the file's own."""
+        runtime = getattr(self, "_runtime_values", None)
+        if not runtime:
+            return self._config_data
+        data = copy.deepcopy(self._config_data)
+        for (section, key), (had_section, file_value, runtime_value) in runtime.items():
+            section_data = data.get(section)
+            if not isinstance(section_data, dict) or section_data.get(key) != runtime_value:
+                continue  # set again since: that is a choice to save
+            if file_value is not _MISSING:
+                section_data[key] = file_value
+                continue
+            section_data.pop(key, None)
+            if not section_data and not had_section:
+                del data[section]
+        return data
+
     def save_config(self) -> None:
         """Save the main configuration to file."""
         try:
@@ -930,7 +966,7 @@ class ConfigManager:
             if os.path.exists(self.config_file_path):
                 with open(self.config_file_path, encoding="utf-8") as f:
                     doc = tomlkit.parse(f.read())
-            self._apply_dict_to_toml(doc, self._config_data, prune=True)
+            self._apply_dict_to_toml(doc, self._config_to_save(), prune=True)
             self._write_toml(self.config_file_path, tomlkit.dumps(doc))
         except Exception as e:
             console.print(f"[red]Error saving configuration: {e}")

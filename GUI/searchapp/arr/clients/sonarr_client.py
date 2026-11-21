@@ -3,8 +3,6 @@
 import logging
 from typing import Any
 
-import requests
-
 from ._base import ArrClient
 
 logger = logging.getLogger("ARR.SONARR")
@@ -28,13 +26,8 @@ class SonarrClient(ArrClient):
         return self._get(f"/series/{series_id}").json()
 
     def series_exists(self, series_id: int) -> bool:
-        """Return True if the series is still present in Sonarr."""
-        try:
-            resp = requests.get(f"{self._base}/series/{series_id}", headers=self._headers, timeout=self.timeout)
-            return resp.ok
-        except Exception as exc:
-            logger.debug(f"Sonarr series {series_id} existence check failed: {exc}")
-            return False
+        """Return True unless Sonarr says the series is gone (404)."""
+        return self._exists(f"/series/{series_id}")
 
     def update_series_path(self, series_id: int, new_path: str) -> bool:
         """Update the root path of a series so Sonarr expects files there."""

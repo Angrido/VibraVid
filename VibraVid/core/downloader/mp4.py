@@ -162,7 +162,9 @@ class MP4FileDownloader:
         Execute the full pipeline.  Returns ``(path | None, interrupted: bool, error: Optional[str])``.
         """
         if not self._preflight():
-            return None, False, None
+            # An existing file or skip_download leaves nothing to do; a preflight error is a failed download
+            # (stopped=True), or a series run would count it as downloaded
+            return None, bool(self._preflight_error), self._preflight_error
 
         self._start_gui_tracking()
         headers = self._build_headers()
@@ -184,7 +186,10 @@ class MP4FileDownloader:
             client = create_client(headers=headers)
             try:
                 if self.check_content_type and not self._check_content_type(client, headers):
-                    return None, False, None
+                    # The GUI row was opened above: close it, or it stays "Downloading" until the stale reaper
+                    error = "The URL returned a web page (HTML/JSON), not media"
+                    self._complete_tracking(success=False, error=error)
+                    return None, True, error
 
                 # Cheap early DRM probe (100 KB Range) — runs for every download
                 # so audio (check_content_type=False) also gets the fast preflight
@@ -205,6 +210,7 @@ class MP4FileDownloader:
         return _run(bar_mgr)
 
     def _preflight(self) -> bool:
+        self._preflight_error: str | None = None
         if SKIP_DOWNLOAD:
             console.print("[yellow]Download skipped due to configuration.")
             return False
@@ -220,6 +226,7 @@ class MP4FileDownloader:
         if not (self.url.lower().startswith("http://") or self.url.lower().startswith("https://")):
             logger.error(f"Invalid URL: {self.url}")
             console.print(f"[red]Invalid URL: {self.url}")
+            self._preflight_error = f"Invalid URL: {self.url}"
             return False
 
         return True

@@ -13,7 +13,7 @@ from django.conf import settings
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from searchapp.api import get_api
+from searchapp.api import get_api, is_site_available
 from searchapp.api.base import Entries
 
 from VibraVid.utils import config_manager
@@ -35,12 +35,27 @@ def _bot_secret() -> str:
     return (os.environ.get("VIBRAVID_BOT_SECRET") or "").strip()
 
 
+def _could_be_forged_by_another_site(request: HttpRequest) -> bool:
+    """True for a request a page on another site could have sent through the user's browser.
+
+    An HTML form can only send urlencoded, multipart or text/plain bodies, and a cross-site fetch with a JSON body
+    needs a CORS preflight that is never granted. The bot's own client always posts JSON (docker/telegram_bot/common.py).
+    """
+    if request.headers.get("Sec-Fetch-Site") == "cross-site":
+        return True
+    return request.method == "POST" and request.content_type != "application/json"
+
+
 def require_bot_secret(view):
     """Rejects the call if the shared secret is missing — but only if one is set."""
     @wraps(view)
     def _guard(request: HttpRequest, *args, **kwargs):
         expected = _bot_secret()
         if not expected:
+            # The views are csrf_exempt: with no secret, refuse what another site could forge (start or cancel downloads).
+            if _could_be_forged_by_another_site(request):
+                log.warning("[bot] chiamata rifiutata su %s: richiesta da un altro sito o non JSON", request.path)
+                return JsonResponse({"error": "richiesta non consentita"}, status=403)
             return view(request, *args, **kwargs)
 
         given = request.headers.get(BOT_TOKEN_HEADER, "")
@@ -82,9 +97,10 @@ def bot_search(request: HttpRequest) -> JsonResponse:
             api = get_api(site)
             results = [_media_item_to_display_dict(i, site) for i in api.search(query)]
             failed = []
-    except Exception as e:
+    except Exception:
+        # The text can carry the provider's host name: it stays in the log, the chat gets a fixed message.
         log.exception("[bot] ricerca fallita per %r su '%s'", query, site)
-        return JsonResponse({"error": str(e)}, status=500)
+        return JsonResponse({"error": "ricerca non riuscita"}, status=500)
 
     # Diagnostics for /log: how many results each site returned and who didn't respond.
     per_site = Counter(str(r.get("source_alias") or "?") for r in results)
@@ -127,8 +143,9 @@ def bot_seasons(request: HttpRequest) -> JsonResponse:
         return JsonResponse(
             {"seasons": [{"number": s.number, "episodes": s.episode_count} for s in seasons]}
         )
-    except Exception as e:  # noqa: BLE001 - Django resilience boundary
-        return JsonResponse({"error": str(e)}, status=500)
+    except Exception:  # noqa: BLE001 - Django resilience boundary
+        log.exception("[bot] stagioni non disponibili")
+        return JsonResponse({"error": "stagioni non disponibili"}, status=500)
 
 
 @csrf_exempt
@@ -145,6 +162,8 @@ def bot_download(request: HttpRequest) -> JsonResponse:
     episodes = str(body.get("episodes") or "").strip() or None
     if not site or not payload or not isinstance(payload, dict):
         return JsonResponse({"error": "parametri mancanti"}, status=400)
+    if not is_site_available(site):
+        return JsonResponse({"error": "sito non disponibile"}, status=400)
 
     item_type = str(payload.get("type") or "").lower()
     if item_type in ("song", "track", "music"):
@@ -163,8 +182,7 @@ def bot_download(request: HttpRequest) -> JsonResponse:
             return JsonResponse({"error": "per le serie indica la stagione"}, status=400)
         episodes = episodes or "*"
 
-    # Same title format as _run_download_in_thread: needed to find the
-    # (internally generated) download_id in the queue entry just created.
+    # Same title format as _run_download_in_thread, echoed back to the chat.
     name = payload.get("name", "Unknown")
     if season and episodes:
         title = f"{name} - S{season} E{episodes}"
@@ -173,17 +191,8 @@ def bot_download(request: HttpRequest) -> JsonResponse:
     else:
         title = name
 
-    _run_download_in_thread(site, payload, season, episodes, media_type)
-
-    download_id = None
-    newest = 0.0
-    with scheduled_downloads_lock:
-        for did, info in scheduled_downloads.items():
-            if info.get("title") == title and info.get("site") == site:
-                ts = info.get("scheduled_at", 0.0)
-                if ts >= newest:
-                    newest = ts
-                    download_id = did
+    job = _run_download_in_thread(site, payload, season, episodes, media_type)
+    download_id = getattr(job, "download_id", None)
     return JsonResponse({"queued": True, "download_id": download_id, "title": title})
 
 
@@ -198,9 +207,9 @@ def bot_sites(request: HttpRequest) -> JsonResponse:
     try:
         from .forms import get_site_choices
         groups = get_site_choices()  # [(group_label, [(value, label), ...]), ...]
-    except Exception as e:
+    except Exception:
         log.exception("[bot] elenco siti fallito")
-        return JsonResponse({"error": str(e)}, status=500)
+        return JsonResponse({"error": "elenco siti non disponibile"}, status=500)
     out = [
         {"label": glabel, "options": [{"value": v, "label": lbl} for v, lbl in opts]}
         for glabel, opts in groups
@@ -272,9 +281,9 @@ def bot_cancel(request: HttpRequest) -> JsonResponse:
                 for d_id in to_remove:
                     cancelled_scheduled_downloads.add(d_id)
                     scheduled_downloads.pop(d_id, None)
-    except Exception as e:
+    except Exception:
         log.exception("[bot] annullo download fallito")
-        return JsonResponse({"error": str(e)}, status=500)
+        return JsonResponse({"error": "annullamento non riuscito"}, status=500)
     return JsonResponse({"cancelled": True})
 
 

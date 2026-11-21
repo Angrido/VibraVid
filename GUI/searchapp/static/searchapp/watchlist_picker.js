@@ -45,6 +45,7 @@
             event.submitter?.focus();
         });
         dialog.querySelector(".watch-cancel").onclick = () => dialog.close();
+        window.CN.closeOnBackdrop(dialog);
         add.onclick = () => {
             let input = form.elements.namedItem("auto_season");
             if (!input) {
@@ -77,11 +78,15 @@
             // Series details already contain the provider's actual season numbers.
             let numbers = [...document.querySelectorAll(".cn-stab[data-season]")].map(tab => tab.dataset.season);
             if (!numbers.length) {
-                const response = await fetch(config.metadataUrl, {
-                    method: "POST", body: data, signal: controller.signal
-                });
-                if (!response.ok) throw new Error("Unable to load seasons. Close and retry.");
-                const metadata = await response.json();
+                let metadata;
+                try {
+                    metadata = await window.CN.fetchJSON(config.metadataUrl, {
+                        method: "POST", body: data, signal: controller.signal
+                    });
+                } catch (error) {
+                    if (error.name === "AbortError" || error.status === 401) throw error;
+                    throw new Error("Unable to load seasons. You can still monitor the entire series.");
+                }
                 numbers = Object.keys(metadata.episodesPerSeason || {});
             }
             if (!dialog.open) return;
@@ -92,7 +97,11 @@
                 "No seasons reported yet. You can monitor the entire series.";
             add.disabled = false;
         } catch (error) {
-            if (dialog.open) status.textContent = error.name === "AbortError" ? "Loading timed out. Close and retry." : error.message;
+            if (!dialog.open) return;
+            status.textContent = error.name === "AbortError"
+                ? "Loading seasons timed out. You can still monitor the entire series." : error.message;
+            // "Entire series" (preselected) needs no season data: adding stays possible.
+            add.disabled = false;
         } finally { clearTimeout(timeout); }
     });
 })();

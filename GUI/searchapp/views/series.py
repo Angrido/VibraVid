@@ -2,11 +2,13 @@
 
 import json
 import logging
+import secrets
 import time
 
 from django.contrib import messages
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 from searchapp.api import get_api
 from searchapp.api.base import Entries
@@ -20,6 +22,32 @@ from .cinema import _duotone
 
 logger = logging.getLogger(__name__)
 
+# The opened title's raw provider payload is kept in the session under a short random key, so the page has a
+# plain GET URL (Back, Reload and the language switch never resubmit a form) without the payload in the URL.
+_PAGES_SESSION_KEY = "series_pages"
+_PAGE_TTL_SECONDS = 6 * 3600
+_PAGES_KEPT = 30
+
+
+def _remember_page(request: HttpRequest, source_alias: str, item_payload_raw: str, audio_language: str | None) -> str:
+    now = time.time()
+    pages = {
+        key: page for key, page in request.session.get(_PAGES_SESSION_KEY, {}).items()
+        if now - page.get("at", 0) < _PAGE_TTL_SECONDS
+    }
+    key = secrets.token_urlsafe(9)
+    pages[key] = {"source_alias": source_alias, "item_payload": item_payload_raw,
+                  "audio_language": audio_language or "", "at": now}
+    request.session[_PAGES_SESSION_KEY] = dict(sorted(pages.items(), key=lambda kv: kv[1]["at"])[-_PAGES_KEPT:])
+    return key
+
+
+def _recall_page(request: HttpRequest, key: str) -> dict | None:
+    page = request.session.get(_PAGES_SESSION_KEY, {}).get(key)
+    if not isinstance(page, dict) or time.time() - page.get("at", 0) >= _PAGE_TTL_SECONDS:
+        return None
+    return page
+
 
 @require_http_methods(["GET", "POST"])
 def series_detail(request: HttpRequest) -> HttpResponse:
@@ -28,23 +56,36 @@ def series_detail(request: HttpRequest) -> HttpResponse:
     if request.method == "POST" and request.POST.get("download_type"):
         return _handle_series_download(request)
 
-    # --- GET, or POST without download_type: show series detail page ---
+    # --- POST without download_type: store the title, then redirect to its GET page ---
     if request.method == "POST":
         source_alias = request.POST.get("source_alias")
         item_payload_raw = request.POST.get("item_payload")
+        if not source_alias or not item_payload_raw:
+            messages.error(request, "Unable to open this title. Select it again from the search results.")
+            return redirect("search_home")
+        key = _remember_page(request, source_alias, item_payload_raw, request.POST.get("audio_language"))
+        return redirect(f"{reverse('series_detail')}?page={key}")
+
+    # --- GET: show series detail page ---
+    page_key = request.GET.get("page")
+    if page_key:
+        page = _recall_page(request, page_key)
+        if page is None:
+            messages.error(request, "This page has expired. Open the title again from the search results.")
+            return redirect("search_home")
+        source_alias, item_payload_raw = page["source_alias"], page["item_payload"]
+        requested_audio = page["audio_language"]
     else:
         source_alias = request.GET.get("source_alias")
         item_payload_raw = request.GET.get("item_payload")
+        requested_audio = request.GET.get("audio_language")
 
     if not source_alias or not item_payload_raw:
-        if request.method == "POST":
-            messages.error(request, "Unable to open this title. Select it again from the search results.")
         return redirect("search_home")
 
     try:
         item_payload = json.loads(item_payload_raw)
-        data = request.POST if request.method == "POST" else request.GET
-        audio_language = normalize_audio_language(data.get("audio_language") or item_payload.get("_audio_language"))
+        audio_language = normalize_audio_language(requested_audio or item_payload.get("_audio_language"))
         if audio_language:
             item_payload["_audio_language"] = audio_language
             item_payload_raw = json.dumps(item_payload)
@@ -163,8 +204,9 @@ def series_detail(request: HttpRequest) -> HttpResponse:
             }
         )
 
-    except Exception as e:
-        messages.error(request, f"Error loading details: {e}")
+    except Exception:
+        logger.exception("Could not load the title details")  # the text can carry the provider's host name
+        messages.error(request, "Could not load the details. Try again, or open the logs for details.")
         return redirect("search_home")
 
 __all__ = ['series_detail']
